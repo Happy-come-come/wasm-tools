@@ -179,6 +179,7 @@
 		return 0;
 	}
 
+	const userAgent = navigator.userAgent || navigator.vendor || window.opera;
 	async function request({url, method = 'GET', respType = 'json', headers = {}, dontUseGenericHeaders = false, body = null, anonymous = false, cookie = null, maxRetries = 0, timeout = 60000, onlyResponse = true} = {}){
 		if(!url)throw('url is not defined');
 
