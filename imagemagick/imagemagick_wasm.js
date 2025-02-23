@@ -8,8 +8,8 @@
 */
 (function(global){
 	'use strict';
-	const _jsUrl = 'https://github.com/Happy-come-come/wasm-tools/raw/refs/heads/master/imagemagick/magick';
-	const _wasmUrl = 'https://github.com/Happy-come-come/wasm-tools/raw/refs/heads/master/imagemagick/magick.wasm';
+	const _jsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/raw/refs/heads/master/imagemagick/magick';
+	const _wasmUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/raw/refs/heads/master/imagemagick/magick.wasm';
 	const _jsVersion = '1.0.0.0';
 	const _wasmVersion = '1.0.0.0';
 	class ImageMagickWasm{
@@ -33,6 +33,7 @@
 				const jsBlob = new Blob([js], {type: 'application/javascript'});
 				const jsBlobUrl = URL.createObjectURL(jsBlob);
 				const module = await import(jsBlobUrl);
+				console.log(module);
 				this.module = module.createModule(wasm);
 				URL.revokeObjectURL(jsBlobUrl);
 				return this.module;
