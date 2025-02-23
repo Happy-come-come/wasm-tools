@@ -15,7 +15,7 @@
 
 (function(global){
 	'use strict';
-	const _jsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick//magick';
+	const _jsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick';
 	const _wasmUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick.wasm';
 	const _jsVersion = '1.0.0.0';
 	const _wasmVersion = '1.0.0.0';
