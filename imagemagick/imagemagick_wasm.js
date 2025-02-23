@@ -6,6 +6,11 @@
 * const imageMagickWasm = new ImageMagickWasm().load();
 * でモジュールを読み込むことができます。
 */
+// ==UserScript==
+// @connect			raw.githubusercontent.com
+// @grant			GM_xmlhttpRequest
+// ==/UserScript==
+
 (function(global){
 	'use strict';
 	const _jsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/raw/refs/heads/master/imagemagick/magick';
