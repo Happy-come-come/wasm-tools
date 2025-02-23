@@ -45,7 +45,7 @@
 		async jsLoad(){
 			if(this.useCache){
 				const cachedJs = await getFromIndexedDB('ImageMagickWasm', 'js', 522);
-				if(cachedJs.data && cachedJs.version){
+				if(cachedJs?.data && cachedJs?.version){
 					if(compareVersions(cachedJs.version, this.jsVersion) >= 0){
 						return cachedJs.data;
 					}
@@ -59,7 +59,7 @@
 		async wasmLoad(){
 			if(this.useCache){
 				const cachedWasm = await getFromIndexedDB('ImageMagickWasm', 'wasm', 522);
-				if(cachedWasm.data && cachedWasm.version){
+				if(cachedWasm?.data && cachedWasm?.version){
 					if(compareVersions(cachedWasm.version, this.wasmVersion) >= 0){
 						return cachedWasm.data;
 					}
