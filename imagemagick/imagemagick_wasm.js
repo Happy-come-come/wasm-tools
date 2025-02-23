@@ -40,8 +40,7 @@
 				const jsBlob = new Blob([js], {type: 'application/javascript'});
 				const jsBlobUrl = URL.createObjectURL(jsBlob);
 				const module = await import(jsBlobUrl);
-				console.log(module.default.createModule);
-				this.module = module.default.createModule(wasm)();
+				this.module = module.default(wasm)();
 				console.log(this.module);
 				URL.revokeObjectURL(jsBlobUrl);
 				return this.module;
@@ -83,6 +82,24 @@
 
 	// グローバルに公開
 	global.ImageMagickWasm = ImageMagickWasm;
+
+	function compareVersions(version1, version2){
+		// 同じなら0, v1が大きいなら1, v2が大きいなら-1
+		const v1Parts = version1.split('.').map(Number);
+		const v2Parts = version2.split('.').map(Number);
+		const length = Math.max(v1Parts.length, v2Parts.length);
+		for(let i = 0; i < length; i++){
+			const v1Part = v1Parts[i] || 0;
+			const v2Part = v2Parts[i] || 0;
+			if(v1Part > v2Part){
+				return 1;
+			}
+			if(v1Part < v2Part){
+				return -1;
+			}
+		}
+		return 0;
+	}
 
 	function openIndexedDB(dbName, storeName){
 		return new Promise((resolve, reject) => {
@@ -168,24 +185,6 @@
 				reject(error);
 			}
 		});
-	}
-
-	function compareVersions(version1, version2){
-		// 同じなら0, v1が大きいなら1, v2が大きいなら-1
-		const v1Parts = version1.split('.').map(Number);
-		const v2Parts = version2.split('.').map(Number);
-		const length = Math.max(v1Parts.length, v2Parts.length);
-		for(let i = 0; i < length; i++){
-			const v1Part = v1Parts[i] || 0;
-			const v2Part = v2Parts[i] || 0;
-			if(v1Part > v2Part){
-				return 1;
-			}
-			if(v1Part < v2Part){
-				return -1;
-			}
-		}
-		return 0;
 	}
 
 	const userAgent = navigator.userAgent || navigator.vendor || window.opera;
