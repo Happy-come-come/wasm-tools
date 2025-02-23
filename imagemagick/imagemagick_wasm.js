@@ -44,34 +44,30 @@
 
 		async jsLoad(){
 			if(this.useCache){
-				const js = await getFromIndexedDB('ImageMagickWasm', 'js', 522);
-				if(compareVersions(js.version, this.jsVersion) >= 0){
-					return js.data;
-				}else{
-					const js = await request({url: this.jsUrl, respType: 'text'});
-					await saveToIndexedDB('ImageMagickWasm', 'js', {data: js, version: this.jsVersion});
-					return js;
+				const cachedJs = await getFromIndexedDB('ImageMagickWasm', 'js', 522);
+				if(cachedJs.data && cachedJs.version){
+					if(compareVersions(cachedJs.version, this.jsVersion) >= 0){
+						return cachedJs.data;
+					}
 				}
-			}else{
-				const js = await request({url: this.jsUrl, respType: 'text'});
-				return js;
 			}
+			const js = await request({url: this.jsUrl, respType: 'text'});
+			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'js', {data: js, version: this.jsVersion});
+			return js;
 		}
 
 		async wasmLoad(){
 			if(this.useCache){
-				const wasm = await getFromIndexedDB('ImageMagickWasm', 'wasm', 522);
-				if(compareVersions(wasm.version, this.wasmVersion) >= 0){
-					return wasm.data;
-				}else{
-					const wasm = await request({url: this.wasmUrl, respType: 'arraybuffer'});
-					await saveToIndexedDB('ImageMagickWasm', 'wasm', {data: wasm, version: this.wasmVersion});
-					return wasm;
+				const cachedWasm = await getFromIndexedDB('ImageMagickWasm', 'wasm', 522);
+				if(cachedWasm.data && cachedWasm.version){
+					if(compareVersions(cachedWasm.version, this.wasmVersion) >= 0){
+						return cachedWasm.data;
+					}
 				}
-			}else{
-				const wasm = await request({url: this.wasmUrl, respType: 'arraybuffer'});
-				return wasm;
 			}
+			const wasm = await request({url: this.wasmUrl, respType: 'arraybuffer'});
+			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'wasm', {data: wasm, version: this.wasmVersion});
+			return wasm;
 		}
 	}
 
