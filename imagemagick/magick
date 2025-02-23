@@ -1,6 +1,6 @@
 
 var createModule = function (wasmArraybuffer){
-	console.log(wasmArraybuffer[0])
+	console.log(wasmArraybuffer)
 	var _scriptName = import.meta.url;
 
 	return (
