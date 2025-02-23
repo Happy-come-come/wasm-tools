@@ -1,5 +1,5 @@
 
-var createModule = ((wasmArraybuffer) => {
+var createModule = function (wasmArraybuffer){
 	var _scriptName = import.meta.url;
 
 	return (
@@ -12,5 +12,5 @@ var createModule = ((wasmArraybuffer) => {
 			return moduleRtn;
 		}
 	);
-});
+};
 export default createModule;
