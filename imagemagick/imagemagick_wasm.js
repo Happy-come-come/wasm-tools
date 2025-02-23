@@ -40,8 +40,9 @@
 				const jsBlob = new Blob([js], {type: 'application/javascript'});
 				const jsBlobUrl = URL.createObjectURL(jsBlob);
 				const module = await import(jsBlobUrl);
-				console.log(module.default);
+				console.log(module.default.createModule);
 				this.module = module.default.createModule(wasm)();
+				console.log(this.module);
 				URL.revokeObjectURL(jsBlobUrl);
 				return this.module;
 			}catch(error){
