@@ -5,6 +5,8 @@
 * このファイルは Emscripten で生成された wasm ファイルを読み込むためのヘルパークラスです。
 * const imageMagickWasm = new ImageMagickWasm().load();
 * でモジュールを読み込むことができます。
+* @connect に raw.githubusercontent.com を追加してください。
+* @grant に GM_xmlhttpRequest を追加してください。
 */
 // ==UserScript==
 // @connect			raw.githubusercontent.com
@@ -13,8 +15,8 @@
 
 (function(global){
 	'use strict';
-	const _jsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/raw/refs/heads/master/imagemagick/magick';
-	const _wasmUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/raw/refs/heads/master/imagemagick/magick.wasm';
+	const _jsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick//magick';
+	const _wasmUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick.wasm';
 	const _jsVersion = '1.0.0.0';
 	const _wasmVersion = '1.0.0.0';
 	class ImageMagickWasm{
