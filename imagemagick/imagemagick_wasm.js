@@ -49,6 +49,7 @@
 				URL.revokeObjectURL(jsBlobUrl);
 				if(!useCache){
 					await saveToIndexedDB('ImageMagickWasm', 'magickJs', {});
+					await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {});
 					await saveToIndexedDB('ImageMagickWasm', 'wasm', {});
 				}
 				return this.module;
@@ -56,20 +57,6 @@
 				console.error(error);
 				return null;
 			}
-		}
-
-		async loadMagickApiJs(){
-			if(this.useCache){
-				const cachedJs = await getFromIndexedDB('ImageMagickWasm', 'magickApiJs', 522);
-				if(cachedJs?.data && cachedJs?.version){
-					if(compareVersions(cachedJs.version, this.magickApiJsVersion) >= 0){
-						return cachedJs.data;
-					}
-				}
-			}
-			const js = await request({url: this.magickApiJsUrl, respType: 'text'});
-			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {data: js, version: this.magickApiJsVersion});
-			return js;
 		}
 
 		async loadMagickJs(){
@@ -83,6 +70,20 @@
 			}
 			const js = await request({url: this.magickJsUrl, respType: 'text'});
 			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickJs', {data: js, version: this.jsVersion});
+			return js;
+		}
+
+		async loadMagickApiJs(){
+			if(this.useCache){
+				const cachedJs = await getFromIndexedDB('ImageMagickWasm', 'magickApiJs', 522);
+				if(cachedJs?.data && cachedJs?.version){
+					if(compareVersions(cachedJs.version, this.magickApiJsVersion) >= 0){
+						return cachedJs.data;
+					}
+				}
+			}
+			const js = await request({url: this.magickApiJsUrl, respType: 'text'});
+			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {data: js, version: this.magickApiJsVersion});
 			return js;
 		}
 
