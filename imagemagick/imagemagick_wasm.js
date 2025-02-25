@@ -15,16 +15,20 @@
 
 (function(global){
 	'use strict';
-	const _jsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick';
+	const _magickJsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick';
+	const _magickApiJsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick_api.js';
 	const _wasmUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick.wasm';
-	const _jsVersion = '1.0.0.0';
+	const _magickJsVersion = '1.0.0.0';
 	const _wasmVersion = '1.0.0.0';
+	const _magickApiJsVersion = '1.0.0.0';
 	class ImageMagickWasm{
-		constructor({jsUrl = _jsUrl, wasmUrl = _wasmUrl, jsVersion = _jsVersion, wasmVersion = _wasmVersion, useCache = true} = {}){
-			this.jsUrl = jsUrl;
+		constructor({magickJsUrl = _magickJsUrl, magickApiJsUrl = _magickApiJsUrl, wasmUrl = _wasmUrl, magickJsVersion = _magickJsVersion, wasmVersion = _wasmVersion, magickApiJsVersion = _magickApiJsVersion, useCache = true} = {}){
+			this.magickJsUrl = magickJsUrl;
 			this.wasmUrl = wasmUrl;
-			this.jsVersion = jsVersion;
+			this.magickApiJsUrl = magickApiJsUrl;
+			this.magickJsVersion = magickJsVersion;
 			this.wasmVersion = wasmVersion;
+			this.magickApiJsVersion = magickApiJsVersion;
 			this.js = null;
 			this.wasm = null;
 			this.module = null;
@@ -33,16 +37,20 @@
 
 		async load(){
 			try{
-				const js = await this.jsLoad();
+				const magickJs = await this.loadMagickJs();
+				const magickApiJs = await this.loadMagickApiJs();
 				const wasm = await this.wasmLoad();
 				this.js = js;
 				this.wasm = wasm;
 				const jsBlob = new Blob([js], {type: 'application/javascript'});
 				const jsBlobUrl = URL.createObjectURL(jsBlob);
 				const module = await import(jsBlobUrl);
-				this.module = await module.default(wasm)();
-				console.log(this.module);
+				this.module = await module.default;
 				URL.revokeObjectURL(jsBlobUrl);
+				if(!useCache){
+					await saveToIndexedDB('ImageMagickWasm', 'magickJs', {});
+					await saveToIndexedDB('ImageMagickWasm', 'wasm', {});
+				}
 				return this.module;
 			}catch(error){
 				console.error(error);
@@ -50,21 +58,35 @@
 			}
 		}
 
-		async jsLoad(){
+		async loadMagickApiJs(){
 			if(this.useCache){
-				const cachedJs = await getFromIndexedDB('ImageMagickWasm', 'js', 522);
+				const cachedJs = await getFromIndexedDB('ImageMagickWasm', 'magickApiJs', 522);
 				if(cachedJs?.data && cachedJs?.version){
-					if(compareVersions(cachedJs.version, this.jsVersion) >= 0){
+					if(compareVersions(cachedJs.version, this.magickApiJsVersion) >= 0){
 						return cachedJs.data;
 					}
 				}
 			}
-			const js = await request({url: this.jsUrl, respType: 'text'});
-			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'js', {data: js, version: this.jsVersion});
+			const js = await request({url: this.magickApiJsUrl, respType: 'text'});
+			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {data: js, version: this.magickApiJsVersion});
 			return js;
 		}
 
-		async wasmLoad(){
+		async loadMagickJs(){
+			if(this.useCache){
+				const cachedJs = await getFromIndexedDB('ImageMagickWasm', 'magickJs', 522);
+				if(cachedJs?.data && cachedJs?.version){
+					if(compareVersions(cachedJs.version, this.magickJsVersion) >= 0){
+						return cachedJs.data;
+					}
+				}
+			}
+			const js = await request({url: this.magickJsUrl, respType: 'text'});
+			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickJs', {data: js, version: this.jsVersion});
+			return js;
+		}
+
+		async loadWasm(){
 			if(this.useCache){
 				const cachedWasm = await getFromIndexedDB('ImageMagickWasm', 'wasm', 522);
 				if(cachedWasm?.data && cachedWasm?.version){
