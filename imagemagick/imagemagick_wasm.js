@@ -3,7 +3,7 @@
 * このファイルはtampermonkeyで @require で読み込むことを想定しています。
 * GM_xmlhttpRequest が使える環境でのみ動作します。
 * このファイルは Emscripten で生成された wasm ファイルを読み込むためのヘルパークラスです。
-* const imageMagickWasm = new ImageMagickWasm().load();
+* const magick = new ImageMagickWasm().load();
 * でモジュールを読み込むことができます。
 * await magick.execute({commands: ['convert --version']});
 * でのような感じで ImageMagick のコマンドを実行することができます。
@@ -51,7 +51,7 @@
 				if(!this.useCache){
 					await saveToIndexedDB('ImageMagickWasm', 'magickJs', {});
 					await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {});
-					await saveToIndexedDB('ImageMagickWasm', 'wasm', {});
+					await saveToIndexedDB('ImageMagickWasm', 'magickWasm', {});
 				}
 				return this.module;
 			}catch(error){
@@ -92,7 +92,7 @@
 
 		async loadWasm(){
 			if(this.useCache){
-				const cachedWasm = await getFromIndexedDB('ImageMagickWasm', 'wasm', 522);
+				const cachedWasm = await getFromIndexedDB('ImageMagickWasm', 'magickWasm', 522);
 				if(cachedWasm?.data && cachedWasm?.version){
 					if(compareVersions(cachedWasm.version, this.wasmVersion) >= 0){
 						return cachedWasm.data;
