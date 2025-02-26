@@ -5,6 +5,8 @@
 * このファイルは Emscripten で生成された wasm ファイルを読み込むためのヘルパークラスです。
 * const imageMagickWasm = new ImageMagickWasm().load();
 * でモジュールを読み込むことができます。
+* await magick.execute({commands: ['convert --version']});
+* でのような感じで ImageMagick のコマンドを実行することができます。
 * @connect に raw.githubusercontent.com を追加してください。
 * @grant に GM_xmlhttpRequest を追加してください。
 */
@@ -29,7 +31,8 @@
 			this.magickJsVersion = magickJsVersion;
 			this.wasmVersion = wasmVersion;
 			this.magickApiJsVersion = magickApiJsVersion;
-			this.js = null;
+			this.magickJs = null;
+			this.magickApiJs = null;
 			this.wasm = null;
 			this.module = null;
 			this.useCache = useCache;
@@ -39,15 +42,13 @@
 			try{
 				const magickJs = await this.loadMagickJs();
 				const magickApiJs = await this.loadMagickApiJs();
-				const wasm = await this.wasmLoad();
-				this.js = js;
-				this.wasm = wasm;
-				const jsBlob = new Blob([js], {type: 'application/javascript'});
-				const jsBlobUrl = URL.createObjectURL(jsBlob);
-				const module = await import(jsBlobUrl);
-				this.module = await module.default;
-				URL.revokeObjectURL(jsBlobUrl);
-				if(!useCache){
+				const wasm = await this.loadWasm();
+				const magickApiJsBlob = new Blob([magickApiJs], {type: 'application/javascript'});
+				const magickApiJsBlobUrl = URL.createObjectURL(magickApiJsBlob);
+				const module = await import(magickApiJsBlobUrl);
+				this.module = await module;
+				URL.revokeObjectURL(magickApiJsBlobUrl);
+				if(!this.useCache){
 					await saveToIndexedDB('ImageMagickWasm', 'magickJs', {});
 					await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {});
 					await saveToIndexedDB('ImageMagickWasm', 'wasm', {});
@@ -70,6 +71,7 @@
 			}
 			const js = await request({url: this.magickJsUrl, respType: 'text'});
 			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickJs', {data: js, version: this.jsVersion});
+			this.magickJs = js;
 			return js;
 		}
 
@@ -84,6 +86,7 @@
 			}
 			const js = await request({url: this.magickApiJsUrl, respType: 'text'});
 			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {data: js, version: this.magickApiJsVersion});
+			this.magickApiJs = js;
 			return js;
 		}
 
@@ -97,14 +100,11 @@
 				}
 			}
 			const wasm = await request({url: this.wasmUrl, respType: 'arraybuffer'});
-			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'wasm', {data: wasm, version: this.wasmVersion});
+			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickWasm', {data: wasm, version: this.wasmVersion});
+			this.wasm = wasm;
 			return wasm;
 		}
 	}
-
-
-	// グローバルに公開
-	global.ImageMagickWasm = ImageMagickWasm;
 
 	function compareVersions(version1, version2){
 		// 同じなら0, v1が大きいなら1, v2が大きいなら-1

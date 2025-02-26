@@ -1,3 +1,8 @@
+/*
+https://github.com/KnicKnic/WASM-ImageMagick
+これ参考にし(パクっ)た。
+*/
+
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
@@ -3860,9 +3865,64 @@ let currentJavascriptURL = './magickApi.js';
 	let stacktrace$$1 = stacktrace.getSync();
 	currentJavascriptURL = stacktrace$$1[0].fileName;
 }
+function arrayBufferToBase64(buffer) {
+	let binary = '';
+	const bytes = new Uint8Array(buffer);
+	for (let i = 0; i < bytes.byteLength; i++) {
+		binary += String.fromCharCode(bytes[i]);
+	}
+	return btoa(binary);
+}
 const cachedJs = (await getFromIndexedDB('ImageMagickWasm', 'magickJs', 522))?.data;
-const cachedJsUrl = cachedJs ? URL.createObjectURL(new Blob([cachedJs], {type: 'application/javascript'})) : null;
+const cachedWasm = (await getFromIndexedDB('ImageMagickWasm', 'magickWasm', 522))?.data;
+const wasmBase64 = arrayBufferToBase64(cachedWasm);
+const modifiedJs = `
+function base64ToArrayBuffer(base64) {
+  const binary_string = atob(base64);
+  const len = binary_string.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary_string.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+if (typeof Module == 'undefined') {
+	Module = {
+		wasmBinary: base64ToArrayBuffer("${wasmBase64}"),
+		noInitialRun: true,
+		moduleLoaded: false,
+		messagesToProcess: [],
+
+		print: text => {
+			stdout.push(text)
+			console.log(text)
+		},
+		printErr: text => {
+			stderr.push(text)
+			console.error(text);
+		},
+		quit: status => {
+			exitCode = status
+		}
+	}
+	if (typeof magickJsCurrentPath !== "undefined") {
+		//Module.locateFile = GetCurrentUrlDifferentFilename;
+	}
+
+	// see https://kripken.github.io/emscripten-site/docs/api_reference/module.html
+	Module.onRuntimeInitialized = function() {
+		FS.mkdir('/pictures')
+		FS.currentPath = '/pictures'
+
+		Module.moduleLoaded = true
+		processFiles()
+	}
+}
+` + cachedJs;
+const modifiedJsBlob = new Blob([modifiedJs], { type: 'application/javascript' });
+const modifiedJsBlobUrl = URL.createObjectURL(modifiedJsBlob);
 const magickWorkerUrl = GetCurrentUrlDifferentFilename('magick.js');
+
 function GenerateMagickWorkerText(magickUrl){
 	// generates code for the following
 	// var magickJsCurrentPath = 'magickUrl';
@@ -3870,9 +3930,9 @@ function GenerateMagickWorkerText(magickUrl){
 	return "var magickJsCurrentPath = '" + magickUrl + "';\n" + 'importScripts(magickJsCurrentPath);';
 }
 let magickWorker;
-if(cachedJsUrl){
-	magickWorker = new Worker(cachedJsUrl);
-	URL.revokeObjectURL(cachedJsUrl);
+if(modifiedJsBlobUrl){
+	magickWorker = new Worker(modifiedJsBlobUrl);
+	URL.revokeObjectURL(modifiedJsBlobUrl);
 }else if(currentJavascriptURL.startsWith('http')){
 	magickWorker = new Worker(window.URL.createObjectURL(new Blob([GenerateMagickWorkerText(magickWorkerUrl)])));
 }else{
