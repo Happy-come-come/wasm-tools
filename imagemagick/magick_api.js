@@ -3860,8 +3860,8 @@ let currentJavascriptURL = './magickApi.js';
 	let stacktrace$$1 = stacktrace.getSync();
 	currentJavascriptURL = stacktrace$$1[0].fileName;
 }
-const cachedJs = (await getFromIndexedDB('ImageMagickWasm', 'js', 522))?.data;
-const cachedJsUrl = cachedJs ? URL.createObjectURL(cachedJs) : null;
+const cachedJs = (await getFromIndexedDB('ImageMagickWasm', 'magickJs', 522))?.data;
+const cachedJsUrl = cachedJs ? URL.createObjectURL(new Blob([cachedJs], {type: 'application/javascript'})) : null;
 const magickWorkerUrl = GetCurrentUrlDifferentFilename('magick.js');
 function GenerateMagickWorkerText(magickUrl){
 	// generates code for the following
