@@ -70,7 +70,7 @@
 				}
 			}
 			const js = await request({url: this.magickJsUrl, respType: 'text'});
-			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickJs', {data: js, version: this.jsVersion});
+			await saveToIndexedDB('ImageMagickWasm', 'magickJs', {data: js, version: this.jsVersion});
 			this.magickJs = js;
 			return js;
 		}
@@ -85,7 +85,7 @@
 				}
 			}
 			const js = await request({url: this.magickApiJsUrl, respType: 'text'});
-			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {data: js, version: this.magickApiJsVersion});
+			await saveToIndexedDB('ImageMagickWasm', 'magickApiJs', {data: js, version: this.magickApiJsVersion});
 			this.magickApiJs = js;
 			return js;
 		}
@@ -100,7 +100,7 @@
 				}
 			}
 			const wasm = await request({url: this.wasmUrl, respType: 'arraybuffer'});
-			if(this.useCache)await saveToIndexedDB('ImageMagickWasm', 'magickWasm', {data: wasm, version: this.wasmVersion});
+			await saveToIndexedDB('ImageMagickWasm', 'magickWasm', {data: wasm, version: this.wasmVersion});
 			this.wasm = wasm;
 			return wasm;
 		}
