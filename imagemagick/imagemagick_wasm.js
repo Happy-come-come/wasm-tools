@@ -8,7 +8,7 @@
 * でのような感じで ImageMagick のコマンドを実行することができます。
 * @connect に raw.githubusercontent.com を追加してください。
 * @grant に GM_xmlhttpRequest を追加してください。
-* unsefe-evalが使える環境でのみ動作します(そうでないとwasmが実行できない(EMBIND_AOTすればいけるらしいが))。
+* unsefe-evalが使える環境でのみ動作します(そうでないとwasmが実行できない(EMBIND_AOT試してみたけどうまくいかなかった))。
 */
 // ==UserScript==
 // @connect			raw.githubusercontent.com
