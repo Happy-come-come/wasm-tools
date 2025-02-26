@@ -106,6 +106,8 @@
 		}
 	}
 
+	global.ImageMagickWasm = ImageMagickWasm;
+
 	function compareVersions(version1, version2){
 		// 同じなら0, v1が大きいなら1, v2が大きいなら-1
 		const v1Parts = version1.split('.').map(Number);
