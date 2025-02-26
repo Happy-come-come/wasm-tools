@@ -1,5 +1,4 @@
 /*
-* WasmLoader クラス
 * このファイルはtampermonkeyで @require で読み込むことを想定しています。
 * GM_xmlhttpRequest が使える環境でのみ動作します。
 * このファイルは Emscripten で生成された wasm ファイルを読み込むためのヘルパークラスです。
@@ -14,7 +13,9 @@
 // ==UserScript==
 // @connect			raw.githubusercontent.com
 // @grant			GM_xmlhttpRequest
+// @require			https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/imagemagick_wasm.js
 // ==/UserScript==
+/* これらがあればとりあえずOK */
 
 (function(global){
 	'use strict';
