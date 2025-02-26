@@ -3,12 +3,13 @@
 * このファイルはtampermonkeyで @require で読み込むことを想定しています。
 * GM_xmlhttpRequest が使える環境でのみ動作します。
 * このファイルは Emscripten で生成された wasm ファイルを読み込むためのヘルパークラスです。
-* const magick = new ImageMagickWasm().load();
+* const magick = await new ImageMagickWasm().load();
 * でモジュールを読み込むことができます。
 * await magick.execute({commands: ['convert --version']});
 * でのような感じで ImageMagick のコマンドを実行することができます。
 * @connect に raw.githubusercontent.com を追加してください。
 * @grant に GM_xmlhttpRequest を追加してください。
+* unsefe-evalが使える環境でのみ動作します(そうでないとwasmが実行できない(EMBIND_AOTすればいけるらしいが))。
 */
 // ==UserScript==
 // @connect			raw.githubusercontent.com
