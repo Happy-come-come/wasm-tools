@@ -1,3 +1,16 @@
+// ==UserScript==
+// @name			imagemagick_wasm
+// @description		ImageMagickのwasmを読み込むためのヘルパークラス
+// @namespace		https://greasyfork.org/ja/users/1023652
+// @version			1.0.0.0
+// @author			ゆにてぃー
+// @license			MIT
+// @match			*://*/*
+// @connect			raw.githubusercontent.com
+// @grant			GM_xmlhttpRequest
+// @connect			raw.githubusercontent.com
+// ==/UserScript==
+
 /*
 * このファイルはtampermonkeyで @require で読み込むことを想定しています。
 * GM_xmlhttpRequest が使える環境でのみ動作します。
@@ -6,16 +19,10 @@
 * でモジュールを読み込むことができます。
 * await magick.execute({commands: ['convert --version']});
 * でのような感じで ImageMagick のコマンドを実行することができます。
-* @connect に raw.githubusercontent.com を追加してください。
 * @grant に GM_xmlhttpRequest を追加してください。
 * unsefe-evalが使える環境でのみ動作します(そうでないとwasmが実行できない(EMBIND_AOT試してみたけどうまくいかなかった))。
+* apiは https://github.com/KnicKnic/WASM-ImageMagick のコードを参考にし(ほぼパクっ)ているので、詳しい使い方は https://github.com/KnicKnic/WASM-ImageMagick/tree/master/apidocs で確認してください。
 */
-// ==UserScript==
-// @connect			raw.githubusercontent.com
-// @grant			GM_xmlhttpRequest
-// @require			https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/imagemagick_wasm.js
-// ==/UserScript==
-/* これらがあればとりあえずOK */
 
 (function(global){
 	'use strict';
@@ -228,7 +235,6 @@
 				'User-agent': userAgent,
 				'Accept': '*/*',
 				'Referer': url,
-				//'Sec-Fetch-Dest': 'empty',
 				'Sec-Fetch-Mode': 'cors',
 				'Sec-Fetch-Site': 'same-origin',
 				...(cookie ? {'Cookie': cookie} : {}),
