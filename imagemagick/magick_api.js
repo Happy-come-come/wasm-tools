@@ -565,6 +565,9 @@ function getConfigureFolders$$1(){
 */
 const knownSupportedReadWriteImageFormats$$1 = [
 	'jpg', 'png',
+	'webp',
+	'heic',
+	'heif',
 	'psd',
 	'tiff', 'xcf', 'gif', 'bmp', 'tga', 'miff', 'ico', 'dcm', 'xpm', 'pcx',
 	//	'pix', // gives error
@@ -3870,37 +3873,6 @@ const cachedWasm = (await getFromIndexedDB('ImageMagickWasm', 'magickWasm', 522)
 const wasmUrl = URL.createObjectURL(new Blob([cachedWasm], { type: 'application/wasm' }));
 const modifiedJs = `
 const wasmUrl = "${wasmUrl}";
-if (typeof Module == 'undefined') {
-	Module = {
-		noInitialRun: true,
-		moduleLoaded: false,
-		messagesToProcess: [],
-
-		print: text => {
-			stdout.push(text)
-			console.log(text)
-		},
-		printErr: text => {
-			stderr.push(text)
-			console.error(text);
-		},
-		quit: status => {
-			exitCode = status
-		}
-	}
-	if (typeof magickJsCurrentPath !== "undefined") {
-		//Module.locateFile = GetCurrentUrlDifferentFilename;
-	}
-
-	// see https://kripken.github.io/emscripten-site/docs/api_reference/module.html
-	Module.onRuntimeInitialized = function() {
-		FS.mkdir('/pictures')
-		FS.currentPath = '/pictures'
-
-		Module.moduleLoaded = true
-		processFiles()
-	}
-}
 ` + cachedJs;
 const modifiedJsBlob = new Blob([modifiedJs], { type: 'application/javascript' });
 const modifiedJsBlobUrl = URL.createObjectURL(modifiedJsBlob);
@@ -5604,6 +5576,7 @@ var IMStyle;
 /* auto-generated file using command `npx ts-node scripts/generateImEnums.ts` */
 var IMTool;
 (function (IMTool){
+	IMTool["magick"] = "magick";
 	IMTool["animate"] = "animate";
 	IMTool["compare"] = "compare";
 	IMTool["composite"] = "composite";

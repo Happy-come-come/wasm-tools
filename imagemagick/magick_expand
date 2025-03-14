@@ -1,88 +1,112 @@
-const stdout = [];
-const stderr = [];
-let exitCode = 0;
+const stdout = []
+const stderr = []
+let exitCode = 0
 
-processFiles = function(){
+
+function ChangeUrl(url, fileName){
+	let splitUrl = url.split('/')
+	splitUrl[splitUrl.length -1] = fileName
+	return splitUrl.join('/')
+}
+function GetCurrentUrlDifferentFilename(fileName){
+	return ChangeUrl(magickJsCurrentPath, fileName)
+}
+
+if(typeof Module == 'undefined'){
+	Module = {
+		noInitialRun: true,
+		moduleLoaded: false,
+		messagesToProcess: [],
+
+		print: text => {
+			stdout.push(text)
+			console.log(text)
+		},
+		printErr: text => {
+			stderr.push(text)
+			console.error(text);
+		},
+		quit: status=> {
+			exitCode = status
+		}
+	}
+	if(typeof magickJsCurrentPath !== "undefined"){
+		Module.locateFile = GetCurrentUrlDifferentFilename;
+	}
+
+	// see https://kripken.github.io/emscripten-site/docs/api_reference/module.html
+	Module.onRuntimeInitialized = function (){
+		FS.mkdir('/pictures')
+		FS.currentPath = '/pictures'
+
+		Module.moduleLoaded = true
+		processFiles()
+	}
+}
+
+processFiles = function (){
 	if(!Module.moduleLoaded){
 		return
 	}
 
 	// clean up stdout, stderr and exitCode
-	stdout.splice(0, stdout.length);
-	stderr.splice(0, stderr.length);
-	exitCode = undefined;
+	stdout.splice(0, stdout.length)
+	stderr.splice(0, stderr.length)
+	exitCode = undefined
 
 	for(let message of Module.messagesToProcess){
-
 		for(let file of message.files){
-			let fileData = file.content;
-			if(fileData instanceof ArrayBuffer){
-				// fileData = new DataView(fileData)
-				fileData = new Uint8Array(fileData);
-			}
-			FS.writeFile(file.name, fileData);
+			FS.writeFile(file.name, file.content)
 		}
 
 		try{
-			Module.callMain(message.args);
+			if(message.args[0] === 'magick'){
+				message.args.shift();
+			}
+			Module.callMain(message.args)
 		}catch(e){}
 		for(let file of message.files){
 			// cleanup source files
 			// mogrify then output files have same name, so skip
 			if(message.args[0] != 'mogrify'){
-				FS.unlink(file.name);
+			FS.unlink(file.name)
 			}
 		}
 
-		let dir = FS.open('/pictures');
-		let files = dir.node.contents;
-		let responseFiles = [];
-		let transfer = [];
+		let dir = FS.open('/pictures')
+		let files = dir.node.contents
+		let responseFiles = []
 		for(let destFilename in files){
-			let processed = {};
-			processed.name = destFilename;
-			let read = FS.readFile(destFilename);
+			let processed = {}
+			processed.name = destFilename
+			let read = FS.readFile(destFilename)
 			// cleanup read file
-			FS.unlink(destFilename);
-
-			if('transferable' in message){
-				processed.buffer = read;
-				transfer.push(read.buffer);
-			}else{
-				processed.blob = new Blob([read]);
-			}
-			responseFiles.push(processed);
+			FS.unlink(destFilename)
+			processed.blob = new Blob([read])
+			responseFiles.push(processed)
 		}
-		message.outputFiles = responseFiles;
-		message.stdout = stdout.map(s => s);
-		message.stderr = stderr.map(s => s);
-		message.exitCode = exitCode;
-
-		for(let file of message.files){
-			if(file.content instanceof ArrayBuffer){
-				transfer.push(file.content);
-			}else{
-				transfer.push(file.content.buffer);
-			}
-		}
-		postMessage(message, transfer);
+		message.outputFiles = responseFiles
+		message.stdout = stdout.map(s => s)
+		message.stderr = stderr.map(s => s)
+		message.exitCode = exitCode
+		postMessage(message)
 	}
-	Module.messagesToProcess = [];
+	Module.messagesToProcess = []
 }
 
-onmessage = function(magickRequest){
-	Module.messagesToProcess.push(magickRequest.data);
-	processFiles();
+onmessage = function (magickRequest){
+	Module.messagesToProcess.push(magickRequest.data)
+	processFiles()
 }
-
 
 var Module = typeof Module != "undefined" ? Module : {};
-var ENVIRONMENT_IS_WEB = true;
-var ENVIRONMENT_IS_WORKER = false;
-var ENVIRONMENT_IS_NODE = false;
+var ENVIRONMENT_IS_WEB = typeof window == "object";
+var ENVIRONMENT_IS_WORKER = typeof importScripts == "function";
+var ENVIRONMENT_IS_NODE = typeof process == "object" && typeof process.versions == "object" && typeof process.versions.node == "string" && process.type != "renderer";
+if(ENVIRONMENT_IS_NODE){}
 var moduleOverrides = Object.assign({}, Module);
 var arguments_ = [];
-var thisProgram = "./this.program";
+var thisProgram = "./magick";
 var quit_ = (status, toThrow) => {
 	throw toThrow
 };
@@ -95,7 +119,36 @@ function locateFile(path){
 	return scriptDirectory + path
 }
 var readAsync, readBinary;
-if(ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER){
+if(ENVIRONMENT_IS_NODE){
+	var fs = require("fs");
+	var nodePath = require("path");
+	scriptDirectory = __dirname + "/";
+	readBinary = filename => {
+		filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
+		var ret = fs.readFileSync(filename);
+		return ret
+	};
+	readAsync = (filename, binary = true) => {
+		filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
+		return new Promise((resolve, reject) => {
+			fs.readFile(filename, binary ? undefined : "utf8", (err, data) => {
+				if(err) reject(err);
+				else resolve(binary ? data.buffer : data)
+			})
+		})
+	};
+	if(!Module["thisProgram"] && process.argv.length > 1){
+		thisProgram = process.argv[1].replace(/\\/g, "/")
+	}
+	arguments_ = process.argv.slice(2);
+	if(typeof module != "undefined"){
+		module["exports"] = Module
+	}
+	quit_ = (status, toThrow) => {
+		process.exitCode = status;
+		throw toThrow
+	}
+}else if(ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER){
 	if(ENVIRONMENT_IS_WORKER){
 		scriptDirectory = self.location.href
 	}else if(typeof document != "undefined" && document.currentScript){
@@ -103,19 +156,46 @@ if(ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER){
 	}
 	if(scriptDirectory.startsWith("blob:")){
 		scriptDirectory = ""
-	}else{
+	}else {
 		scriptDirectory = scriptDirectory.substr(0, scriptDirectory.replace(/[?#].*/, "").lastIndexOf("/") + 1)
 	} {
-		readAsync = url => fetch(url, {
-			credentials: "same-origin"
-		}).then(response => {
-			if(response.ok){
-				return response.arrayBuffer()
+		if(ENVIRONMENT_IS_WORKER){
+			readBinary = url => {
+				var xhr = new XMLHttpRequest;
+				xhr.open("GET", url, false);
+				xhr.responseType = "arraybuffer";
+				xhr.send(null);
+				return new Uint8Array(xhr.response)
 			}
-			return Promise.reject(new Error(response.status + " : " + response.url))
-		})
+		}
+		readAsync = url => {
+			if(isFileURI(url)){
+				return new Promise((resolve, reject) => {
+					var xhr = new XMLHttpRequest;
+					xhr.open("GET", url, true);
+					xhr.responseType = "arraybuffer";
+					xhr.onload = () => {
+						if(xhr.status == 200 || xhr.status == 0 && xhr.response){
+							resolve(xhr.response);
+							return
+						}
+						reject(xhr.status)
+					};
+					xhr.onerror = reject;
+					xhr.send(null)
+				})
+			}
+			return fetch(url, {
+				credentials: "same-origin"
+			}).then(response => {
+				if(response.ok){
+					return response.arrayBuffer()
+				}
+				return Promise.reject(new Error(response.status + " : " + response.url))
+			})
+		}
 	}
-}else{}
+}else {}
 var out = Module["print"] || console.log.bind(console);
 var err = Module["printErr"] || console.error.bind(console);
 Object.assign(Module, moduleOverrides);
@@ -233,6 +313,7 @@ function abort(what){
 }
 var dataURIPrefix = "data:application/octet-stream;base64,";
 var isDataURI = filename => filename.startsWith(dataURIPrefix);
+var isFileURI = filename => filename.startsWith("file://");
 
 function findWasmBinary(){
 	var f = "magick.wasm";
@@ -243,8 +324,9 @@ function findWasmBinary(){
 }
 var wasmBinaryFile;
 try{
-	wasmBinaryFile = wasmUrl;
-}catch{}
+	wasmBinaryFile = wasmUrl
+}catch{};
+
 function getBinarySync(file){
 	if(file == wasmBinaryFile && wasmBinary){
 		return new Uint8Array(wasmBinary)
@@ -270,11 +352,13 @@ function instantiateArrayBuffer(binaryFile, imports, receiver){
 }
 
 function instantiateAsync(binary, binaryFile, imports, callback){
-	if(!binary && typeof WebAssembly.instantiateStreaming == "function" && !isDataURI(binaryFile) && typeof fetch == "function"){
+	if(!binary && typeof WebAssembly.instantiateStreaming == "function" && !isDataURI(binaryFile) && !isFileURI(binaryFile) && !ENVIRONMENT_IS_NODE && typeof fetch == "function"){
 		return fetch(binaryFile, {
 			credentials: "same-origin"
 		}).then(response => {
-			try{URL.revokeObjectURL(wasmUrl)}catch{};
+			try{
+				URL.revokeObjectURL(wasmUrl)
+			}catch{};
 			var result = WebAssembly.instantiateStreaming(response, imports);
 			return result.then(callback, function(reason){
 				err(`wasm streaming compile failed: ${reason}`);
@@ -297,10 +381,10 @@ function createWasm(){
 
 	function receiveInstance(instance, module){
 		wasmExports = instance.exports;
-		wasmMemory = wasmExports["mb"];
+		wasmMemory = wasmExports["lb"];
 		updateMemoryViews();
-		wasmTable = wasmExports["qb"];
-		addOnInit(wasmExports["nb"]);
+		wasmTable = wasmExports["pb"];
+		addOnInit(wasmExports["mb"]);
 		removeRunDependency("wasm-instantiate");
 		return wasmExports
 	}
@@ -312,7 +396,7 @@ function createWasm(){
 	if(Module["instantiateWasm"]){
 		try{
 			return Module["instantiateWasm"](info, receiveInstance)
-		}catch(e){
+		} catch (e){
 			err(`Module.instantiateWasm callback failed with error: ${e}`);
 			return false
 		}
@@ -358,12 +442,12 @@ var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead = NaN) => {
 		var u2 = heapOrArray[idx++] & 63;
 		if((u0 & 240) == 224){
 			u0 = (u0 & 15) << 12 | u1 << 6 | u2
-		}else{
+		}else {
 			u0 = (u0 & 7) << 18 | u1 << 12 | u2 << 6 | heapOrArray[idx++] & 63
 		}
 		if(u0 < 65536){
 			str += String.fromCharCode(u0)
-		}else{
+		}else {
 			var ch = u0 - 65536;
 			str += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023)
 		}
@@ -474,7 +558,18 @@ var ___cxa_throw = (ptr, type, destructor) => {
 var initRandomFill = () => {
 	if(typeof crypto == "object" && typeof crypto["getRandomValues"] == "function"){
 		return view => crypto.getRandomValues(view)
-	}else abort("initRandomDevice")
+	}else if(ENVIRONMENT_IS_NODE){
+		try{
+			var crypto_module = require("crypto");
+			var randomFillSync = crypto_module["randomFillSync"];
+			if(randomFillSync){
+				return view => crypto_module["randomFillSync"](view)
+			}
+			var randomBytes = crypto_module["randomBytes"];
+			return view => (view.set(randomBytes(view.byteLength)), view)
+		} catch (e){}
+	}
+	abort("initRandomDevice")
 };
 var randomFill = view => (randomFill = initRandomFill())(view);
 var PATH = {
@@ -529,11 +624,11 @@ var PATH = {
 		return root + dir
 	},
 	basename: path => {
-		if(path === "/")return "/";
+		if(path === "/") return "/";
 		path = PATH.normalize(path);
 		path = path.replace(/\/$/, "");
 		var lastSlash = path.lastIndexOf("/");
-		if(lastSlash === -1)return path;
+		if(lastSlash === -1) return path;
 		return path.substr(lastSlash + 1)
 	},
 	join: (...paths) => PATH.normalize(paths.join("/")),
@@ -563,13 +658,13 @@ var PATH_FS = {
 		function trim(arr){
 			var start = 0;
 			for(; start < arr.length; start++){
-				if(arr[start] !== "")break
+				if(arr[start] !== "") break
 			}
 			var end = arr.length - 1;
 			for(; end >= 0; end--){
-				if(arr[end] !== "")break
+				if(arr[end] !== "") break
 			}
-			if(start > end)return [];
+			if(start > end) return [];
 			return arr.slice(start, end - start + 1)
 		}
 		var fromParts = trim(from.split("/"));
@@ -602,14 +697,14 @@ var lengthBytesUTF8 = str => {
 		}else if(c >= 55296 && c <= 57343){
 			len += 4;
 			++i
-		}else{
+		}else {
 			len += 3
 		}
 	}
 	return len
 };
 var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
-	if(!(maxBytesToWrite > 0))return 0;
+	if(!(maxBytesToWrite > 0)) return 0;
 	var startIdx = outIdx;
 	var endIdx = outIdx + maxBytesToWrite - 1;
 	for(var i = 0; i < str.length; ++i){
@@ -619,19 +714,19 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
 			u = 65536 + ((u & 1023) << 10) | u1 & 1023
 		}
 		if(u <= 127){
-			if(outIdx >= endIdx)break;
+			if(outIdx >= endIdx) break;
 			heap[outIdx++] = u
 		}else if(u <= 2047){
-			if(outIdx + 1 >= endIdx)break;
+			if(outIdx + 1 >= endIdx) break;
 			heap[outIdx++] = 192 | u >> 6;
 			heap[outIdx++] = 128 | u & 63
 		}else if(u <= 65535){
-			if(outIdx + 2 >= endIdx)break;
+			if(outIdx + 2 >= endIdx) break;
 			heap[outIdx++] = 224 | u >> 12;
 			heap[outIdx++] = 128 | u >> 6 & 63;
 			heap[outIdx++] = 128 | u & 63
-		}else{
-			if(outIdx + 3 >= endIdx)break;
+		}else {
+			if(outIdx + 3 >= endIdx) break;
 			heap[outIdx++] = 240 | u >> 18;
 			heap[outIdx++] = 128 | u >> 12 & 63;
 			heap[outIdx++] = 128 | u >> 6 & 63;
@@ -652,12 +747,26 @@ function intArrayFromString(stringy, dontAddNull, length){
 var FS_stdin_getChar = () => {
 	if(!FS_stdin_getChar_buffer.length){
 		var result = null;
-		if(typeof window != "undefined" && typeof window.prompt == "function"){
+		if(ENVIRONMENT_IS_NODE){
+			var BUFSIZE = 256;
+			var buf = Buffer.alloc(BUFSIZE);
+			var bytesRead = 0;
+			var fd = process.stdin.fd;
+			try{
+				bytesRead = fs.readSync(fd, buf, 0, BUFSIZE)
+			} catch (e){
+				if(e.toString().includes("EOF")) bytesRead = 0;
+				else throw e
+			}
+			if(bytesRead > 0){
+				result = buf.slice(0, bytesRead).toString("utf-8")
+			}
+		}else if(typeof window != "undefined" && typeof window.prompt == "function"){
 			result = window.prompt("Input: ");
 			if(result !== null){
 				result += "\n"
 			}
-		}else{}
+		}else {}
 		if(!result){
 			return null
 		}
@@ -685,11 +794,11 @@ var TTY = {
 			}
 			stream.tty = tty;
 			stream.seekable = false
-		}, close(stream){
+		},close(stream){
 			stream.tty.ops.fsync(stream.tty)
-		}, fsync(stream){
+		},fsync(stream){
 			stream.tty.ops.fsync(stream.tty)
-		}, read(stream, buffer, offset, length, pos){
+		},read(stream, buffer, offset, length, pos){
 			if(!stream.tty || !stream.tty.ops.get_char){
 				throw new FS.ErrnoError(60)
 			}
@@ -698,13 +807,13 @@ var TTY = {
 				var result;
 				try{
 					result = stream.tty.ops.get_char(stream.tty)
-				}catch(e){
+				} catch (e){
 					throw new FS.ErrnoError(29)
 				}
 				if(result === undefined && bytesRead === 0){
 					throw new FS.ErrnoError(6)
 				}
-				if(result === null || result === undefined)break;
+				if(result === null || result === undefined) break;
 				bytesRead++;
 				buffer[offset + i] = result
 			}
@@ -712,7 +821,7 @@ var TTY = {
 				stream.node.timestamp = Date.now()
 			}
 			return bytesRead
-		}, write(stream, buffer, offset, length, pos){
+		},write(stream, buffer, offset, length, pos){
 			if(!stream.tty || !stream.tty.ops.put_char){
 				throw new FS.ErrnoError(60)
 			}
@@ -720,7 +829,7 @@ var TTY = {
 				for(var i = 0; i < length; i++){
 					stream.tty.ops.put_char(stream.tty, buffer[offset + i])
 				}
-			}catch(e){
+			} catch (e){
 				throw new FS.ErrnoError(29)
 			}
 			if(length){
@@ -732,19 +841,19 @@ var TTY = {
 	default_tty_ops: {
 		get_char(tty){
 			return FS_stdin_getChar()
-		}, put_char(tty, val){
+		},put_char(tty, val){
 			if(val === null || val === 10){
 				out(UTF8ArrayToString(tty.output));
 				tty.output = []
-			}else{
+			}else {
 				if(val != 0) tty.output.push(val)
 			}
-		}, fsync(tty){
+		},fsync(tty){
 			if(tty.output && tty.output.length > 0){
 				out(UTF8ArrayToString(tty.output));
 				tty.output = []
 			}
-		}, ioctl_tcgets(tty){
+		},ioctl_tcgets(tty){
 			return {
 				c_iflag: 25856,
 				c_oflag: 5,
@@ -752,9 +861,9 @@ var TTY = {
 				c_lflag: 35387,
 				c_cc: [3, 28, 127, 21, 4, 0, 1, 0, 17, 19, 26, 0, 18, 15, 23, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 			}
-		}, ioctl_tcsets(tty, optional_actions, data){
+		},ioctl_tcsets(tty, optional_actions, data){
 			return 0
-		}, ioctl_tiocgwinsz(tty){
+		},ioctl_tiocgwinsz(tty){
 			return [24, 80]
 		}
 	},
@@ -763,10 +872,10 @@ var TTY = {
 			if(val === null || val === 10){
 				err(UTF8ArrayToString(tty.output));
 				tty.output = []
-			}else{
+			}else {
 				if(val != 0) tty.output.push(val)
 			}
-		}, fsync(tty){
+		},fsync(tty){
 			if(tty.output && tty.output.length > 0){
 				err(UTF8ArrayToString(tty.output));
 				tty.output = []
@@ -865,13 +974,13 @@ var MEMFS = {
 		return node
 	},
 	getFileDataAsTypedArray(node){
-		if(!node.contents)return new Uint8Array(0);
-		if(node.contents.subarray)return node.contents.subarray(0, node.usedBytes);
+		if(!node.contents) return new Uint8Array(0);
+		if(node.contents.subarray) return node.contents.subarray(0, node.usedBytes);
 		return new Uint8Array(node.contents)
 	},
 	expandFileStorage(node, newCapacity){
 		var prevCapacity = node.contents ? node.contents.length : 0;
-		if(prevCapacity >= newCapacity)return;
+		if(prevCapacity >= newCapacity) return;
 		var CAPACITY_DOUBLING_MAX = 1024 * 1024;
 		newCapacity = Math.max(newCapacity, prevCapacity * (prevCapacity < CAPACITY_DOUBLING_MAX ? 2 : 1.125) >>> 0);
 		if(prevCapacity != 0) newCapacity = Math.max(newCapacity, 256);
@@ -880,11 +989,11 @@ var MEMFS = {
 		if(node.usedBytes > 0) node.contents.set(oldContents.subarray(0, node.usedBytes), 0)
 	},
 	resizeFileStorage(node, newSize){
-		if(node.usedBytes == newSize)return;
+		if(node.usedBytes == newSize) return;
 		if(newSize == 0){
 			node.contents = null;
 			node.usedBytes = 0
-		}else{
+		}else {
 			var oldContents = node.contents;
 			node.contents = new Uint8Array(newSize);
 			if(oldContents){
@@ -909,7 +1018,7 @@ var MEMFS = {
 				attr.size = node.usedBytes
 			}else if(FS.isLink(node.mode)){
 				attr.size = node.link.length
-			}else{
+			}else {
 				attr.size = 0
 			}
 			attr.atime = new Date(node.timestamp);
@@ -918,7 +1027,7 @@ var MEMFS = {
 			attr.blksize = 4096;
 			attr.blocks = Math.ceil(attr.size / attr.blksize);
 			return attr
-		}, setattr(node, attr){
+		},setattr(node, attr){
 			if(attr.mode !== undefined){
 				node.mode = attr.mode
 			}
@@ -928,16 +1037,16 @@ var MEMFS = {
 			if(attr.size !== undefined){
 				MEMFS.resizeFileStorage(node, attr.size)
 			}
-		}, lookup(parent, name){
+		},lookup(parent, name){
 			throw FS.genericErrors[44]
-		}, mknod(parent, name, mode, dev){
+		},mknod(parent, name, mode, dev){
 			return MEMFS.createNode(parent, name, mode, dev)
-		}, rename(old_node, new_dir, new_name){
+		},rename(old_node, new_dir, new_name){
 			if(FS.isDir(old_node.mode)){
 				var new_node;
 				try{
 					new_node = FS.lookupNode(new_dir, new_name)
-				}catch(e){}
+				} catch (e){}
 				if(new_node){
 					for(var i in new_node.contents){
 						throw new FS.ErrnoError(55)
@@ -949,27 +1058,27 @@ var MEMFS = {
 			old_node.name = new_name;
 			new_dir.contents[new_name] = old_node;
 			new_dir.timestamp = old_node.parent.timestamp
-		}, unlink(parent, name){
+		},unlink(parent, name){
 			delete parent.contents[name];
 			parent.timestamp = Date.now()
-		}, rmdir(parent, name){
+		},rmdir(parent, name){
 			var node = FS.lookupNode(parent, name);
 			for(var i in node.contents){
 				throw new FS.ErrnoError(55)
 			}
 			delete parent.contents[name];
 			parent.timestamp = Date.now()
-		}, readdir(node){
+		},readdir(node){
 			var entries = [".", ".."];
 			for(var key of Object.keys(node.contents)){
 				entries.push(key)
 			}
 			return entries
-		}, symlink(parent, newname, oldpath){
+		},symlink(parent, newname, oldpath){
 			var node = MEMFS.createNode(parent, newname, 511 | 40960, 0);
 			node.link = oldpath;
 			return node
-		}, readlink(node){
+		},readlink(node){
 			if(!FS.isLink(node.mode)){
 				throw new FS.ErrnoError(28)
 			}
@@ -979,19 +1088,19 @@ var MEMFS = {
 	stream_ops: {
 		read(stream, buffer, offset, length, position){
 			var contents = stream.node.contents;
-			if(position >= stream.node.usedBytes)return 0;
+			if(position >= stream.node.usedBytes) return 0;
 			var size = Math.min(stream.node.usedBytes - position, length);
 			if(size > 8 && contents.subarray){
 				buffer.set(contents.subarray(position, position + size), offset)
-			}else{
+			}else {
 				for(var i = 0; i < size; i++) buffer[offset + i] = contents[position + i]
 			}
 			return size
-		}, write(stream, buffer, offset, length, position, canOwn){
+		},write(stream, buffer, offset, length, position, canOwn){
 			if(buffer.buffer === HEAP8.buffer){
 				canOwn = false
 			}
-			if(!length)return 0;
+			if(!length) return 0;
 			var node = stream.node;
 			node.timestamp = Date.now();
 			if(buffer.subarray && (!node.contents || node.contents.subarray)){
@@ -1011,14 +1120,14 @@ var MEMFS = {
 			MEMFS.expandFileStorage(node, position + length);
 			if(node.contents.subarray && buffer.subarray){
 				node.contents.set(buffer.subarray(offset, offset + length), position)
-			}else{
+			}else {
 				for(var i = 0; i < length; i++){
 					node.contents[position + i] = buffer[offset + i]
 				}
 			}
 			node.usedBytes = Math.max(node.usedBytes, position + length);
 			return length
-		}, llseek(stream, offset, whence){
+		},llseek(stream, offset, whence){
 			var position = offset;
 			if(whence === 1){
 				position += stream.position
@@ -1031,10 +1140,10 @@ var MEMFS = {
 				throw new FS.ErrnoError(28)
 			}
 			return position
-		}, allocate(stream, offset, length){
+		},allocate(stream, offset, length){
 			MEMFS.expandFileStorage(stream.node, offset + length);
 			stream.node.usedBytes = Math.max(stream.node.usedBytes, offset + length)
-		}, mmap(stream, length, position, prot, flags){
+		},mmap(stream, length, position, prot, flags){
 			if(!FS.isFile(stream.node.mode)){
 				throw new FS.ErrnoError(43)
 			}
@@ -1044,7 +1153,7 @@ var MEMFS = {
 			if(!(flags & 2) && contents && contents.buffer === HEAP8.buffer){
 				allocated = false;
 				ptr = contents.byteOffset
-			}else{
+			}else {
 				allocated = true;
 				ptr = mmapAlloc(length);
 				if(!ptr){
@@ -1054,7 +1163,7 @@ var MEMFS = {
 					if(position > 0 || position + length < contents.length){
 						if(contents.subarray){
 							contents = contents.subarray(position, position + length)
-						}else{
+						}else {
 							contents = Array.prototype.slice.call(contents, position, position + length)
 						}
 					}
@@ -1064,7 +1173,7 @@ var MEMFS = {
 			return {
 				ptr, allocated
 			}
-		}, msync(stream, buffer, offset, length, mmapFlags){
+		},msync(stream, buffer, offset, length, mmapFlags){
 			MEMFS.stream_ops.write(stream, buffer, 0, length, offset, false);
 			return 0
 		}
@@ -1075,10 +1184,10 @@ var asyncLoad = (url, onload, onerror, noRunDep) => {
 	readAsync(url).then(arrayBuffer => {
 		onload(new Uint8Array(arrayBuffer));
 		if(dep) removeRunDependency(dep)
-	}, err => {
+	},err => {
 		if(onerror){
 			onerror()
-		}else{
+		}else {
 			throw `Loading data file "${url}" failed.`
 		}
 	});
@@ -1092,7 +1201,7 @@ var FS_handledByPreloadPlugin = (byteArray, fullname, finish, onerror) => {
 	if(typeof Browser != "undefined") Browser.init();
 	var handled = false;
 	preloadPlugins.forEach(plugin => {
-		if(handled)return;
+		if(handled) return;
 		if(plugin["canHandle"](fullname)){
 			plugin["handle"](byteArray, fullname, finish, onerror);
 			handled = true
@@ -1124,7 +1233,7 @@ var FS_createPreloadedFile = (parent, name, url, canRead, canWrite, onload, oner
 	addRunDependency(dep);
 	if(typeof url == "string"){
 		asyncLoad(url, processData, onerror)
-	}else{
+	}else {
 		processData(url)
 	}
 };
@@ -1239,7 +1348,7 @@ var FS = {
 	},
 	lookupPath(path, opts = {}){
 		path = PATH_FS.resolve(path);
-		if(!path)return {
+		if(!path) return {
 			path: "",
 			node: null
 		};
@@ -1291,7 +1400,7 @@ var FS = {
 		while(true){
 			if(FS.isRoot(node)){
 				var mount = node.mount.mountpoint;
-				if(!path)return mount;
+				if(!path) return mount;
 				return mount[mount.length - 1] !== "/" ? `${mount}/${path}` : mount + path
 			}
 			path = path ? `${node.name}/${path}` : node.name;
@@ -1314,7 +1423,7 @@ var FS = {
 		var hash = FS.hashName(node.parent.id, node.name);
 		if(FS.nameTable[hash] === node){
 			FS.nameTable[hash] = node.name_next
-		}else{
+		}else {
 			var current = FS.nameTable[hash];
 			while(current){
 				if(current.name_next === node){
@@ -1395,24 +1504,24 @@ var FS = {
 		return 0
 	},
 	mayLookup(dir){
-		if(!FS.isDir(dir.mode))return 54;
+		if(!FS.isDir(dir.mode)) return 54;
 		var errCode = FS.nodePermissions(dir, "x");
-		if(errCode)return errCode;
-		if(!dir.node_ops.lookup)return 2;
+		if(errCode) return errCode;
+		if(!dir.node_ops.lookup) return 2;
 		return 0
 	},
 	mayCreate(dir, name){
 		try{
 			var node = FS.lookupNode(dir, name);
 			return 20
-		}catch(e){}
+		} catch (e){}
 		return FS.nodePermissions(dir, "wx")
 	},
 	mayDelete(dir, name, isdir){
 		var node;
 		try{
 			node = FS.lookupNode(dir, name)
-		}catch(e){
+		} catch (e){
 			return e.errno
 		}
 		var errCode = FS.nodePermissions(dir, "wx");
@@ -1426,7 +1535,7 @@ var FS = {
 			if(FS.isRoot(node) || FS.getPath(node) === FS.cwd()){
 				return 10
 			}
-		}else{
+		}else {
 			if(FS.isDir(node.mode)){
 				return 31
 			}
@@ -1485,7 +1594,7 @@ var FS = {
 			var device = FS.getDevice(stream.node.rdev);
 			stream.stream_ops = device.stream_ops;
 			stream.stream_ops.open?.(stream)
-		}, llseek(){
+		},llseek(){
 			throw new FS.ErrnoError(70)
 		}
 	},
@@ -1644,7 +1753,7 @@ var FS = {
 			d += "/" + dirs[i];
 			try{
 				FS.mkdir(d, mode)
-			}catch(e){
+			} catch (e){
 				if(e.errno != 20) throw e
 			}
 		}
@@ -1708,7 +1817,7 @@ var FS = {
 		var new_node;
 		try{
 			new_node = FS.lookupNode(new_dir, new_name)
-		}catch(e){}
+		} catch (e){}
 		if(old_node === new_node){
 			return
 		}
@@ -1737,7 +1846,7 @@ var FS = {
 		try{
 			old_dir.node_ops.rename(old_node, new_dir, new_name);
 			old_node.parent = new_dir
-		}catch(e){
+		} catch (e){
 			throw e
 		} finally {
 			FS.hashAddNode(old_node)
@@ -1830,7 +1939,7 @@ var FS = {
 				follow: !dontFollow
 			});
 			node = lookup.node
-		}else{
+		}else {
 			node = path
 		}
 		if(!node.node_ops.setattr){
@@ -1855,7 +1964,7 @@ var FS = {
 				follow: !dontFollow
 			});
 			node = lookup.node
-		}else{
+		}else {
 			node = path
 		}
 		if(!node.node_ops.setattr){
@@ -1882,7 +1991,7 @@ var FS = {
 				follow: true
 			});
 			node = lookup.node
-		}else{
+		}else {
 			node = path
 		}
 		if(!node.node_ops.setattr){
@@ -1927,20 +2036,20 @@ var FS = {
 		if(flags & 64){
 			mode = typeof mode == "undefined" ? 438 : mode;
 			mode = mode & 4095 | 32768
-		}else{
+		}else {
 			mode = 0
 		}
 		var node;
 		if(typeof path == "object"){
 			node = path
-		}else{
+		}else {
 			path = PATH.normalize(path);
 			try{
 				var lookup = FS.lookupPath(path, {
 					follow: !(flags & 131072)
 				});
 				node = lookup.node
-			}catch(e){}
+			} catch (e){}
 		}
 		var created = false;
 		if(flags & 64){
@@ -1948,7 +2057,7 @@ var FS = {
 				if(flags & 128){
 					throw new FS.ErrnoError(20)
 				}
-			}else{
+			}else {
 				node = FS.mknod(path, mode, 0);
 				created = true
 			}
@@ -1994,7 +2103,7 @@ var FS = {
 			if(stream.stream_ops.close){
 				stream.stream_ops.close(stream)
 			}
-		}catch(e){
+		} catch (e){
 			throw e
 		} finally {
 			FS.closeStream(stream.fd)
@@ -2147,7 +2256,7 @@ var FS = {
 			FS.write(stream, buf, 0, actualNumBytes, undefined, opts.canOwn)
 		}else if(ArrayBuffer.isView(data)){
 			FS.write(stream, data, 0, data.byteLength, undefined, opts.canOwn)
-		}else{
+		}else {
 			throw new Error("Unsupported data type")
 		}
 		FS.close(stream)
@@ -2224,22 +2333,22 @@ var FS = {
 				};
 				return node
 			}
-		}, {}, "/proc/self/fd")
+		},{}, "/proc/self/fd")
 	},
 	createStandardStreams(input, output, error){
 		if(input){
 			FS.createDevice("/dev", "stdin", input)
-		}else{
+		}else {
 			FS.symlink("/dev/tty", "/dev/stdin")
 		}
 		if(output){
 			FS.createDevice("/dev", "stdout", null, output)
-		}else{
+		}else {
 			FS.symlink("/dev/tty", "/dev/stdout")
 		}
 		if(error){
 			FS.createDevice("/dev", "stderr", null, error)
-		}else{
+		}else {
 			FS.symlink("/dev/tty1", "/dev/stderr")
 		}
 		var stdin = FS.open("/dev/stdin", 0);
@@ -2290,7 +2399,7 @@ var FS = {
 				follow: !dontResolveLastLink
 			});
 			path = lookup.path
-		}catch(e){}
+		} catch (e){}
 		var ret = {
 			isRoot: false,
 			exists: false,
@@ -2318,7 +2427,7 @@ var FS = {
 			ret.object = lookup.node;
 			ret.name = lookup.node.name;
 			ret.isRoot = lookup.path === "/"
-		}catch(e){
+		} catch (e){
 			ret.error = e.errno
 		}
 		return ret
@@ -2332,7 +2441,7 @@ var FS = {
 			var current = PATH.join2(parent, part);
 			try{
 				FS.mkdir(current)
-			}catch(e){}
+			} catch (e){}
 			parent = current
 		}
 		return current
@@ -2371,23 +2480,23 @@ var FS = {
 		FS.registerDevice(dev, {
 			open(stream){
 				stream.seekable = false
-			}, close(stream){
+			},close(stream){
 				if(output?.buffer?.length){
 					output(10)
 				}
-			}, read(stream, buffer, offset, length, pos){
+			},read(stream, buffer, offset, length, pos){
 				var bytesRead = 0;
 				for(var i = 0; i < length; i++){
 					var result;
 					try{
 						result = input()
-					}catch(e){
+					} catch (e){
 						throw new FS.ErrnoError(29)
 					}
 					if(result === undefined && bytesRead === 0){
 						throw new FS.ErrnoError(6)
 					}
-					if(result === null || result === undefined)break;
+					if(result === null || result === undefined) break;
 					bytesRead++;
 					buffer[offset + i] = result
 				}
@@ -2395,11 +2504,11 @@ var FS = {
 					stream.node.timestamp = Date.now()
 				}
 				return bytesRead
-			}, write(stream, buffer, offset, length, pos){
+			},write(stream, buffer, offset, length, pos){
 				for(var i = 0; i < length; i++){
 					try{
 						output(buffer[offset + i])
-					}catch(e){
+					} catch (e){
 						throw new FS.ErrnoError(29)
 					}
 				}
@@ -2412,14 +2521,14 @@ var FS = {
 		return FS.mkdev(path, mode, dev)
 	},
 	forceLoadFile(obj){
-		if(obj.isDevice || obj.isFolder || obj.link || obj.contents)return true;
+		if(obj.isDevice || obj.isFolder || obj.link || obj.contents) return true;
 		if(typeof XMLHttpRequest != "undefined"){
 			throw new Error("Lazy loading should have been performed (contents set) in createLazyFile, but it was not. Lazy loading only works in web workers. Use --embed-file or --preload-file in emcc on the main thread.")
-		}else{
+		}else {
 			try{
 				obj.contents = readBinary(obj.url);
 				obj.usedBytes = obj.contents.length
-			}catch(e){
+			} catch (e){
 				throw new FS.ErrnoError(29)
 			}
 		}
@@ -2510,7 +2619,7 @@ var FS = {
 				isDevice: false,
 				contents: lazyArray
 			}
-		}else{
+		}else {
 			var properties = {
 				isDevice: false,
 				url
@@ -2542,13 +2651,13 @@ var FS = {
 
 		function writeChunks(stream, buffer, offset, length, position){
 			var contents = stream.node.contents;
-			if(position >= contents.length)return 0;
+			if(position >= contents.length) return 0;
 			var size = Math.min(contents.length - position, length);
 			if(contents.slice){
 				for(var i = 0; i < size; i++){
 					buffer[offset + i] = contents[position + i]
 				}
-			}else{
+			}else {
 				for(var i = 0; i < size; i++){
 					buffer[offset + i] = contents.get(position + i)
 				}
@@ -2590,7 +2699,7 @@ var SOCKFS = {
 			}
 		};
 		return FS.createNode(null, "/", 16384 | 511, 0)
-	}, createSocket(family, type, protocol){
+	},createSocket(family, type, protocol){
 		type &= ~526336;
 		var streaming = type == 1;
 		if(streaming && protocol && protocol != 6){
@@ -2611,20 +2720,20 @@ var SOCKFS = {
 		});
 		sock.stream = stream;
 		return sock
-	}, getSocket(fd){
+	},getSocket(fd){
 		var stream = FS.getStream(fd);
 		if(!stream || !FS.isSocket(stream.node.mode)){
 			return null
 		}
 		return stream.node.sock
-	}, stream_ops: {
+	},stream_ops: {
 		poll(stream){
 			var sock = stream.node.sock;
 			return sock.sock_ops.poll(sock)
-		}, ioctl(stream, request, varargs){
+		},ioctl(stream, request, varargs){
 			var sock = stream.node.sock;
 			return sock.sock_ops.ioctl(sock, request, varargs)
-		}, read(stream, buffer, offset, length, position){
+		},read(stream, buffer, offset, length, position){
 			var sock = stream.node.sock;
 			var msg = sock.sock_ops.recvmsg(sock, length);
 			if(!msg){
@@ -2632,19 +2741,19 @@ var SOCKFS = {
 			}
 			buffer.set(msg.buffer, offset);
 			return msg.buffer.length
-		}, write(stream, buffer, offset, length, position){
+		},write(stream, buffer, offset, length, position){
 			var sock = stream.node.sock;
 			return sock.sock_ops.sendmsg(sock, buffer, offset, length)
-		}, close(stream){
+		},close(stream){
 			var sock = stream.node.sock;
 			sock.sock_ops.close(sock)
 		}
-	}, nextname(){
+	},nextname(){
 		if(!SOCKFS.nextname.current){
 			SOCKFS.nextname.current = 0
 		}
 		return "socket[" + SOCKFS.nextname.current++ + "]"
-	}, websocket_sock_ops: {
+	},websocket_sock_ops: {
 		createPeer(sock, addr, port){
 			var ws;
 			if(typeof addr == "object"){
@@ -2656,7 +2765,7 @@ var SOCKFS = {
 				if(ws._socket){
 					addr = ws._socket.remoteAddress;
 					port = ws._socket.remotePort
-				}else{
+				}else {
 					var result = /ws[s]?:\/\/([^:]+):(\d+)/.exec(ws.url);
 					if(!result){
 						throw new Error("WebSocket URL must be in the format ws(s)://address:port")
@@ -2664,7 +2773,7 @@ var SOCKFS = {
 					addr = result[1];
 					port = parseInt(result[2], 10)
 				}
-			}else{
+			}else {
 				try{
 					var runtimeConfig = Module["websocket"] && "object" === typeof Module["websocket"];
 					var url = "ws:#".replace("#", "//");
@@ -2692,12 +2801,15 @@ var SOCKFS = {
 						subProtocols = "null";
 						opts = undefined
 					}
-					var WebSocketConstructor; {
+					var WebSocketConstructor;
+					if(ENVIRONMENT_IS_NODE){
+						WebSocketConstructor = require("ws")
+					}else {
 						WebSocketConstructor = WebSocket
 					}
 					ws = new WebSocketConstructor(url, opts);
 					ws.binaryType = "arraybuffer"
-				}catch(e){
+				} catch (e){
 					throw new FS.ErrnoError(23)
 				}
 			}
@@ -2710,13 +2822,13 @@ var SOCKFS = {
 				peer.msg_send_queue.push(new Uint8Array([255, 255, 255, 255, "p".charCodeAt(0), "o".charCodeAt(0), "r".charCodeAt(0), "t".charCodeAt(0), (sock.sport & 65280) >> 8, sock.sport & 255]))
 			}
 			return peer
-		}, getPeer(sock, addr, port){
+		},getPeer(sock, addr, port){
 			return sock.peers[addr + ":" + port]
-		}, addPeer(sock, peer){
+		},addPeer(sock, peer){
 			sock.peers[peer.addr + ":" + peer.port] = peer
-		}, removePeer(sock, peer){
+		},removePeer(sock, peer){
 			delete sock.peers[peer.addr + ":" + peer.port]
-		}, handlePeerEvents(sock, peer){
+		},handlePeerEvents(sock, peer){
 			var first = true;
 			var handleOpen = function(){
 				Module["websocket"].emit("open", sock.stream.fd);
@@ -2726,7 +2838,7 @@ var SOCKFS = {
 						peer.socket.send(queued);
 						queued = peer.msg_send_queue.shift()
 					}
-				}catch(e){
+				} catch (e){
 					peer.socket.close()
 				}
 			};
@@ -2735,7 +2847,7 @@ var SOCKFS = {
 				if(typeof data == "string"){
 					var encoder = new TextEncoder;
 					data = encoder.encode(data)
-				}else{
+				}else {
 					assert(data.byteLength !== undefined);
 					if(data.byteLength == 0){
 						return
@@ -2773,7 +2885,7 @@ var SOCKFS = {
 					sock.error = 14;
 					Module["websocket"].emit("error", [sock.stream.fd, sock.error, "ECONNREFUSED: Connection refused"])
 				})
-			}else{
+			}else {
 				peer.socket.onopen = handleOpen;
 				peer.socket.onclose = function(){
 					Module["websocket"].emit("close", sock.stream.fd)
@@ -2786,7 +2898,7 @@ var SOCKFS = {
 					Module["websocket"].emit("error", [sock.stream.fd, sock.error, "ECONNREFUSED: Connection refused"])
 				}
 			}
-		}, poll(sock){
+		},poll(sock){
 			if(sock.type === 1 && sock.server){
 				return sock.pending.length ? 64 | 1 : 0
 			}
@@ -2802,7 +2914,7 @@ var SOCKFS = {
 				mask |= 16
 			}
 			return mask
-		}, ioctl(sock, request, arg){
+		},ioctl(sock, request, arg){
 			switch (request){
 				case 21531:
 					var bytes = 0;
@@ -2814,11 +2926,11 @@ var SOCKFS = {
 				default:
 					return 28
 			}
-		}, close(sock){
+		},close(sock){
 			if(sock.server){
 				try{
 					sock.server.close()
-				}catch(e){}
+				} catch (e){}
 				sock.server = null
 			}
 			var peers = Object.keys(sock.peers);
@@ -2826,11 +2938,11 @@ var SOCKFS = {
 				var peer = sock.peers[peers[i]];
 				try{
 					peer.socket.close()
-				}catch(e){}
+				} catch (e){}
 				SOCKFS.websocket_sock_ops.removePeer(sock, peer)
 			}
 			return 0
-		}, bind(sock, addr, port){
+		},bind(sock, addr, port){
 			if(typeof sock.saddr != "undefined" || typeof sock.sport != "undefined"){
 				throw new FS.ErrnoError(28)
 			}
@@ -2843,12 +2955,12 @@ var SOCKFS = {
 				}
 				try{
 					sock.sock_ops.listen(sock, 0)
-				}catch(e){
+				} catch (e){
 					if(!(e.name === "ErrnoError")) throw e;
 					if(e.errno !== 138) throw e
 				}
 			}
-		}, connect(sock, addr, port){
+		},connect(sock, addr, port){
 			if(sock.server){
 				throw new FS.ErrnoError(138)
 			}
@@ -2857,7 +2969,7 @@ var SOCKFS = {
 				if(dest){
 					if(dest.socket.readyState === dest.socket.CONNECTING){
 						throw new FS.ErrnoError(7)
-					}else{
+					}else {
 						throw new FS.ErrnoError(30)
 					}
 				}
@@ -2865,18 +2977,48 @@ var SOCKFS = {
 			var peer = SOCKFS.websocket_sock_ops.createPeer(sock, addr, port);
 			sock.daddr = peer.addr;
 			sock.dport = peer.port
-		}, listen(sock, backlog){
+		},listen(sock, backlog){
 			if(!ENVIRONMENT_IS_NODE){
 				throw new FS.ErrnoError(138)
 			}
-		}, accept(listensock){
+			if(sock.server){
+				throw new FS.ErrnoError(28)
+			}
+			var WebSocketServer = require("ws").Server;
+			var host = sock.saddr;
+			sock.server = new WebSocketServer({
+				host, port: sock.sport
+			});
+			Module["websocket"].emit("listen", sock.stream.fd);
+			sock.server.on("connection", function(ws){
+				if(sock.type === 1){
+					var newsock = SOCKFS.createSocket(sock.family, sock.type, sock.protocol);
+					var peer = SOCKFS.websocket_sock_ops.createPeer(newsock, ws);
+					newsock.daddr = peer.addr;
+					newsock.dport = peer.port;
+					sock.pending.push(newsock);
+					Module["websocket"].emit("connection", newsock.stream.fd)
+				}else {
+					SOCKFS.websocket_sock_ops.createPeer(sock, ws);
+					Module["websocket"].emit("connection", sock.stream.fd)
+				}
+			});
+			sock.server.on("close", function(){
+				Module["websocket"].emit("close", sock.stream.fd);
+				sock.server = null
+			});
+			sock.server.on("error", function(error){
+				sock.error = 23;
+				Module["websocket"].emit("error", [sock.stream.fd, sock.error, "EHOSTUNREACH: Host is unreachable"])
+			})
+		},accept(listensock){
 			if(!listensock.server || !listensock.pending.length){
 				throw new FS.ErrnoError(28)
 			}
 			var newsock = listensock.pending.shift();
 			newsock.stream.flags = listensock.stream.flags;
 			return newsock
-		}, getname(sock, peer){
+		},getname(sock, peer){
 			var addr, port;
 			if(peer){
 				if(sock.daddr === undefined || sock.dport === undefined){
@@ -2884,14 +3026,14 @@ var SOCKFS = {
 				}
 				addr = sock.daddr;
 				port = sock.dport
-			}else{
+			}else {
 				addr = sock.saddr || 0;
 				port = sock.sport || 0
 			}
 			return {
 				addr, port
 			}
-		}, sendmsg(sock, buffer, offset, length, addr, port){
+		},sendmsg(sock, buffer, offset, length, addr, port){
 			if(sock.type === 2){
 				if(addr === undefined || port === undefined){
 					addr = sock.daddr;
@@ -2900,7 +3042,7 @@ var SOCKFS = {
 				if(addr === undefined || port === undefined){
 					throw new FS.ErrnoError(17)
 				}
-			}else{
+			}else {
 				addr = sock.daddr;
 				port = sock.dport
 			}
@@ -2928,10 +3070,10 @@ var SOCKFS = {
 			try{
 				dest.socket.send(data);
 				return length
-			}catch(e){
+			} catch (e){
 				throw new FS.ErrnoError(28)
 			}
-		}, recvmsg(sock, length){
+		},recvmsg(sock, length){
 			if(sock.type === 1 && sock.server){
 				throw new FS.ErrnoError(53)
 			}
@@ -2976,7 +3118,7 @@ var inetPton4 = str => {
 	var b = str.split(".");
 	for(var i = 0; i < 4; i++){
 		var tmp = Number(b[i]);
-		if(isNaN(tmp))return null;
+		if(isNaN(tmp)) return null;
 		b[i] = tmp
 	}
 	return (b[0] | b[1] << 8 | b[2] << 16 | b[3] << 24) >>> 0
@@ -2995,7 +3137,7 @@ var inetPton6 = str => {
 	}
 	if(str.startsWith("::")){
 		str = str.replace("::", "Z:")
-	}else{
+	}else {
 		str = str.replace("::", ":Z:")
 	}
 	if(str.indexOf(".") > 0){
@@ -3004,7 +3146,7 @@ var inetPton6 = str => {
 		words[words.length - 4] = jstoi_q(words[words.length - 4]) + jstoi_q(words[words.length - 3]) * 256;
 		words[words.length - 3] = jstoi_q(words[words.length - 2]) + jstoi_q(words[words.length - 1]) * 256;
 		words = words.slice(0, words.length - 2)
-	}else{
+	}else {
 		words = str.split(":")
 	}
 	offset = 0;
@@ -3016,10 +3158,10 @@ var inetPton6 = str => {
 					parts[w + z] = 0
 				}
 				offset = z - 1
-			}else{
+			}else {
 				parts[w + offset] = _htons(parseInt(words[w], 16))
 			}
-		}else{
+		}else {
 			parts[w + offset] = words[w]
 		}
 	}
@@ -3073,7 +3215,7 @@ var DNS = {
 		var addr;
 		if(DNS.address_map.addrs[name]){
 			addr = DNS.address_map.addrs[name]
-		}else{
+		}else {
 			var id = DNS.address_map.id++;
 			assert(id < 65535, "exceeded max address mappings of 65535");
 			addr = "172.29." + (id & 255) + "." + (id & 65280);
@@ -3197,7 +3339,7 @@ var SYSCALLS = {
 		var dir;
 		if(dirfd === -100){
 			dir = FS.cwd()
-		}else{
+		}else {
 			var dirstream = SYSCALLS.getStreamFromFD(dirfd);
 			dir = dirstream.path
 		}
@@ -3258,7 +3400,7 @@ function ___syscall_chmod(path, mode){
 		path = SYSCALLS.getStr(path);
 		FS.chmod(path, mode);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3270,7 +3412,7 @@ function ___syscall_connect(fd, addr, addrlen, d1, d2, d3){
 		var info = getSocketAddress(addr, addrlen);
 		sock.sock_ops.connect(sock, info.addr, info.port);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3298,7 +3440,7 @@ function ___syscall_faccessat(dirfd, path, amode, flags){
 			return -2
 		}
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3309,11 +3451,11 @@ function ___syscall_fallocate(fd, mode, offset_low, offset_high, len_low, len_hi
 	var offset = convertI32PairToI53Checked(offset_low, offset_high);
 	var len = convertI32PairToI53Checked(len_low, len_high);
 	try{
-		if(isNaN(offset))return 61;
+		if(isNaN(offset)) return 61;
 		var stream = SYSCALLS.getStreamFromFD(fd);
 		FS.allocate(stream, offset, len);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3323,7 +3465,7 @@ function ___syscall_fchmod(fd, mode){
 	try{
 		FS.fchmod(fd, mode);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3377,7 +3519,7 @@ function ___syscall_fcntl64(fd, cmd, varargs){
 				return 0
 		}
 		return -28
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3387,7 +3529,7 @@ function ___syscall_fstat64(fd, buf){
 	try{
 		var stream = SYSCALLS.getStreamFromFD(fd);
 		return SYSCALLS.doStat(FS.stat, stream.path, buf)
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3407,7 +3549,7 @@ function ___syscall_statfs64(path, size, buf){
 		HEAP32[buf + 44 >> 2] = 2;
 		HEAP32[buf + 36 >> 2] = 255;
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3417,7 +3559,7 @@ function ___syscall_fstatfs64(fd, size, buf){
 	try{
 		var stream = SYSCALLS.getStreamFromFD(fd);
 		return ___syscall_statfs64(0, size, buf)
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3426,13 +3568,13 @@ var stringToUTF8 = (str, outPtr, maxBytesToWrite) => stringToUTF8Array(str, HEAP
 
 function ___syscall_getcwd(buf, size){
 	try{
-		if(size === 0)return -28;
+		if(size === 0) return -28;
 		var cwd = FS.cwd();
 		var cwdLengthInBytes = lengthBytesUTF8(cwd) + 1;
-		if(size < cwdLengthInBytes)return -68;
+		if(size < cwdLengthInBytes) return -68;
 		stringToUTF8(cwd, buf, size);
 		return cwdLengthInBytes
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3459,7 +3601,7 @@ function ___syscall_getdents64(fd, dirp, count){
 				});
 				id = lookup.node.id;
 				type = 4
-			}else{
+			}else {
 				var child = FS.lookupNode(stream.node, name);
 				id = child.id;
 				type = FS.isChrdev(child.mode) ? 2 : FS.isDir(child.mode) ? 4 : FS.isLink(child.mode) ? 10 : 8
@@ -3474,7 +3616,7 @@ function ___syscall_getdents64(fd, dirp, count){
 		}
 		FS.llseek(stream, idx * struct_size, 0);
 		return pos
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3487,12 +3629,12 @@ function ___syscall_ioctl(fd, op, varargs){
 		switch (op){
 			case 21509:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					return 0
 				}
 			case 21505:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					if(stream.tty.ops.ioctl_tcgets){
 						var termios = stream.tty.ops.ioctl_tcgets(stream);
 						var argp = syscallGetVarargP();
@@ -3511,14 +3653,14 @@ function ___syscall_ioctl(fd, op, varargs){
 			case 21511:
 			case 21512:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					return 0
 				}
 			case 21506:
 			case 21507:
 			case 21508:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					if(stream.tty.ops.ioctl_tcsets){
 						var argp = syscallGetVarargP();
 						var c_iflag = HEAP32[argp >> 2];
@@ -3537,14 +3679,14 @@ function ___syscall_ioctl(fd, op, varargs){
 				}
 			case 21519:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					var argp = syscallGetVarargP();
 					HEAP32[argp >> 2] = 0;
 					return 0
 				}
 			case 21520:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					return -28
 				}
 			case 21531:
@@ -3554,7 +3696,7 @@ function ___syscall_ioctl(fd, op, varargs){
 				}
 			case 21523:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					if(stream.tty.ops.ioctl_tiocgwinsz){
 						var winsize = stream.tty.ops.ioctl_tiocgwinsz(stream.tty);
 						var argp = syscallGetVarargP();
@@ -3565,18 +3707,18 @@ function ___syscall_ioctl(fd, op, varargs){
 				}
 			case 21524:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					return 0
 				}
 			case 21515:
 				{
-					if(!stream.tty)return -59;
+					if(!stream.tty) return -59;
 					return 0
 				}
 			default:
 				return -28
 		}
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3586,7 +3728,7 @@ function ___syscall_lstat64(path, buf){
 	try{
 		path = SYSCALLS.getStr(path);
 		return SYSCALLS.doStat(FS.lstat, path, buf)
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3600,7 +3742,7 @@ function ___syscall_mkdirat(dirfd, path, mode){
 		if(path[path.length - 1] === "/") path = path.substr(0, path.length - 1);
 		FS.mkdir(path, mode, 0);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3614,7 +3756,7 @@ function ___syscall_newfstatat(dirfd, path, buf, flags){
 		flags = flags & ~6400;
 		path = SYSCALLS.calculateAt(dirfd, path, allowEmpty);
 		return SYSCALLS.doStat(nofollow ? FS.lstat : FS.stat, path, buf)
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3627,7 +3769,7 @@ function ___syscall_openat(dirfd, path, flags, varargs){
 		path = SYSCALLS.calculateAt(dirfd, path);
 		var mode = varargs ? syscallGetVarargI() : 0;
 		return FS.open(path, flags, mode).fd
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3637,14 +3779,14 @@ function ___syscall_readlinkat(dirfd, path, buf, bufsize){
 	try{
 		path = SYSCALLS.getStr(path);
 		path = SYSCALLS.calculateAt(dirfd, path);
-		if(bufsize <= 0)return -28;
+		if(bufsize <= 0) return -28;
 		var ret = FS.readlink(path);
 		var len = Math.min(bufsize, lengthBytesUTF8(ret));
 		var endChar = HEAP8[buf + len];
 		stringToUTF8(ret, buf, bufsize + 1);
 		HEAP8[buf + len] = endChar;
 		return len
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3654,13 +3796,13 @@ function ___syscall_recvfrom(fd, buf, len, flags, addr, addrlen){
 	try{
 		var sock = getSocketFromFD(fd);
 		var msg = sock.sock_ops.recvmsg(sock, len);
-		if(!msg)return 0;
+		if(!msg) return 0;
 		if(addr){
 			var errno = writeSockaddr(addr, sock.family, DNS.lookup_name(msg.addr), msg.port, addrlen)
 		}
 		HEAPU8.set(msg.buffer, buf);
 		return msg.buffer.byteLength
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3674,7 +3816,7 @@ function ___syscall_renameat(olddirfd, oldpath, newdirfd, newpath){
 		newpath = SYSCALLS.calculateAt(newdirfd, newpath);
 		FS.rename(oldpath, newpath);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3685,7 +3827,7 @@ function ___syscall_rmdir(path){
 		path = SYSCALLS.getStr(path);
 		FS.rmdir(path);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3699,7 +3841,7 @@ function ___syscall_sendto(fd, message, length, flags, addr, addr_len){
 		}
 		var dest = getSocketAddress(addr, addr_len);
 		return sock.sock_ops.sendmsg(sock, HEAP8, message, length, dest.addr, dest.port)
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3709,7 +3851,7 @@ function ___syscall_socket(domain, type, protocol){
 	try{
 		var sock = SOCKFS.createSocket(domain, type, protocol);
 		return sock.stream.fd
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3719,7 +3861,7 @@ function ___syscall_stat64(path, buf){
 	try{
 		path = SYSCALLS.getStr(path);
 		return SYSCALLS.doStat(FS.stat, path, buf)
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3731,7 +3873,7 @@ function ___syscall_symlink(target, linkpath){
 		linkpath = SYSCALLS.getStr(linkpath);
 		FS.symlink(target, linkpath);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3745,11 +3887,11 @@ function ___syscall_unlinkat(dirfd, path, flags){
 			FS.unlink(path)
 		}else if(flags === 512){
 			FS.rmdir(path)
-		}else{
+		}else {
 			abort("Invalid flags passed to unlinkat")
 		}
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3765,14 +3907,14 @@ function ___syscall_utimensat(dirfd, path, times, flags){
 		if(!times){
 			atime = now;
 			mtime = now
-		}else{
+		}else {
 			var seconds = readI53FromI64(times);
 			var nanoseconds = HEAP32[times + 8 >> 2];
 			if(nanoseconds == 1073741823){
 				atime = now
 			}else if(nanoseconds == 1073741822){
 				atime = -1
-			}else{
+			}else {
 				atime = seconds * 1e3 + nanoseconds / (1e3 * 1e3)
 			}
 			times += 16;
@@ -3782,7 +3924,7 @@ function ___syscall_utimensat(dirfd, path, times, flags){
 				mtime = now
 			}else if(nanoseconds == 1073741822){
 				mtime = -1
-			}else{
+			}else {
 				mtime = seconds * 1e3 + nanoseconds / (1e3 * 1e3)
 			}
 		}
@@ -3790,7 +3932,7 @@ function ___syscall_utimensat(dirfd, path, times, flags){
 			FS.utime(path, atime, mtime)
 		}
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -3835,7 +3977,7 @@ var whenDependentTypesAreResolved = (myTypes, dependentTypes, getTypeConverters)
 	dependentTypes.forEach((dt, i) => {
 		if(registeredTypes.hasOwnProperty(dt)){
 			typeConverters[i] = registeredTypes[dt]
-		}else{
+		}else {
 			unregisteredTypes.push(dt);
 			if(!awaitingDependencies.hasOwnProperty(dt)){
 				awaitingDependencies[dt] = []
@@ -3940,7 +4082,7 @@ function sharedRegisterType(rawType, registeredInstance, options = {}){
 	if(registeredTypes.hasOwnProperty(rawType)){
 		if(options.ignoreDuplicateRegistrations){
 			return
-		}else{
+		}else {
 			throwBindingError(`Cannot register type '${name}' twice`)
 		}
 	}
@@ -3962,11 +4104,11 @@ var __embind_register_bool = (rawType, name, trueValue, falseValue) => {
 	registerType(rawType, {
 		name, fromWireType: function(wt){
 			return !!wt
-		}, toWireType: function(destructors, o){
+		},toWireType: function(destructors, o){
 			return o ? trueValue : falseValue
-		}, argPackAdvance: GenericWireTypeSize, readValueFromPointer: function(pointer){
+		},argPackAdvance: GenericWireTypeSize, readValueFromPointer: function(pointer){
 			return this["fromWireType"](HEAPU8[pointer])
-		}, destructorFunction: null
+		},destructorFunction: null
 	})
 };
 var shallowCopyInternalPointer = o => ({
@@ -3989,7 +4131,7 @@ var detachFinalizer = handle => {};
 var runDestructor = $$ => {
 	if($$.smartPtr){
 		$$.smartPtrType.rawDestructor($$.smartPtr)
-	}else{
+	}else {
 		$$.ptrType.registeredClass.rawDestructor($$.ptr)
 	}
 };
@@ -4061,7 +4203,7 @@ function RegisteredPointer_fromWireType(ptr){
 			registeredInstance.$$.ptr = rawPointer;
 			registeredInstance.$$.smartPtr = ptr;
 			return registeredInstance["clone"]()
-		}else{
+		}else {
 			var rv = registeredInstance["clone"]();
 			this.destructor(ptr);
 			return rv
@@ -4076,7 +4218,7 @@ function RegisteredPointer_fromWireType(ptr){
 				smartPtrType: this,
 				smartPtr: ptr
 			})
-		}else{
+		}else {
 			return makeClassHandle(this.registeredClass.instancePrototype, {
 				ptrType: this,
 				ptr
@@ -4091,7 +4233,7 @@ function RegisteredPointer_fromWireType(ptr){
 	var toType;
 	if(this.isConst){
 		toType = registeredPointerRecord.constPointerType
-	}else{
+	}else {
 		toType = registeredPointerRecord.pointerType
 	}
 	var dp = downcastPointer(rawPointer, this.registeredClass, toType.registeredClass);
@@ -4105,7 +4247,7 @@ function RegisteredPointer_fromWireType(ptr){
 			smartPtrType: this,
 			smartPtr: ptr
 		})
-	}else{
+	}else {
 		return makeClassHandle(toType.registeredClass.instancePrototype, {
 			ptrType: toType,
 			ptr: dp
@@ -4166,14 +4308,14 @@ var init_ClassHandle = () => {
 				rightClass = rightClass.baseClass
 			}
 			return leftClass === rightClass && left === right
-		}, clone(){
+		},clone(){
 			if(!this.$$.ptr){
 				throwInstanceAlreadyDeleted(this)
 			}
 			if(this.$$.preservePointerOnDelete){
 				this.$$.count.value += 1;
 				return this
-			}else{
+			}else {
 				var clone = attachFinalizer(Object.create(Object.getPrototypeOf(this), {
 					$$: {
 						value: shallowCopyInternalPointer(this.$$)
@@ -4183,7 +4325,7 @@ var init_ClassHandle = () => {
 				clone.$$.deleteScheduled = false;
 				return clone
 			}
-		}, delete(){
+		},delete(){
 			if(!this.$$.ptr){
 				throwInstanceAlreadyDeleted(this)
 			}
@@ -4196,9 +4338,9 @@ var init_ClassHandle = () => {
 				this.$$.smartPtr = undefined;
 				this.$$.ptr = undefined
 			}
-		}, isDeleted(){
+		},isDeleted(){
 			return !this.$$.ptr
-		}, deleteLater(){
+		},deleteLater(){
 			if(!this.$$.ptr){
 				throwInstanceAlreadyDeleted(this)
 			}
@@ -4242,7 +4384,7 @@ var exposePublicSymbol = (name, value, numArguments) => {
 			throwBindingError(`Cannot register multiple overloads of a function with the same number of arguments (${numArguments})!`)
 		}
 		Module[name].overloadTable[numArguments] = value
-	}else{
+	}else {
 		Module[name] = value;
 		Module[name].argCount = numArguments
 	}
@@ -4310,7 +4452,7 @@ function genericPointerToWireType(destructors, handle){
 				destructors.push(this.rawDestructor, ptr)
 			}
 			return ptr
-		}else{
+		}else {
 			return 0
 		}
 	}
@@ -4333,7 +4475,7 @@ function genericPointerToWireType(destructors, handle){
 			case 0:
 				if(handle.$$.smartPtrType === this){
 					ptr = handle.$$.smartPtr
-				}else{
+				}else {
 					throwBindingError(`Cannot convert argument of type ${handle.$$.smartPtrType?handle.$$.smartPtrType.name:handle.$$.ptrType.name} to parameter type ${this.name}`)
 				}
 				break;
@@ -4343,7 +4485,7 @@ function genericPointerToWireType(destructors, handle){
 			case 2:
 				if(handle.$$.smartPtrType === this){
 					ptr = handle.$$.smartPtr
-				}else{
+				}else {
 					var clonedHandle = handle["clone"]();
 					ptr = this.rawShare(ptr, Emval.toHandle(() => clonedHandle["delete"]()));
 					if(destructors !== null){
@@ -4385,9 +4527,9 @@ var init_RegisteredPointer = () => {
 				ptr = this.rawGetPointee(ptr)
 			}
 			return ptr
-		}, destructor(ptr){
+		},destructor(ptr){
 			this.rawDestructor?.(ptr)
-		}, argPackAdvance: GenericWireTypeSize, readValueFromPointer: readPointer, fromWireType: RegisteredPointer_fromWireType
+		},argPackAdvance: GenericWireTypeSize, readValueFromPointer: readPointer, fromWireType: RegisteredPointer_fromWireType
 	})
 };
 
@@ -4407,11 +4549,11 @@ function RegisteredPointer(name, registeredClass, isReference, isConst, isSmartP
 		if(isConst){
 			this["toWireType"] = constNoSmartPtrRawPointerToWireType;
 			this.destructorFunction = null
-		}else{
+		}else {
 			this["toWireType"] = nonConstNoSmartPtrRawPointerToWireType;
 			this.destructorFunction = null
 		}
-	}else{
+	}else {
 		this["toWireType"] = genericPointerToWireType
 	}
 }
@@ -4421,7 +4563,7 @@ var replacePublicSymbol = (name, value, numArguments) => {
 	}
 	if(undefined !== Module[name].overloadTable && undefined !== numArguments){
 		Module[name].overloadTable[numArguments] = value
-	}else{
+	}else {
 		Module[name] = value;
 		Module[name].argCount = numArguments
 	}
@@ -4468,7 +4610,7 @@ var extendError = (baseErrorType, errorName) => {
 	errorClass.prototype.toString = function(){
 		if(this.message === undefined){
 			return this.name
-		}else{
+		}else {
 			return `${this.name}: ${this.message}`
 		}
 	};
@@ -4519,7 +4661,7 @@ var __embind_register_class = (rawType, rawPointerType, rawConstPointerType, bas
 		if(baseClassRawType){
 			baseClass = base.registeredClass;
 			basePrototype = baseClass.instancePrototype
-		}else{
+		}else {
 			basePrototype = ClassHandle.prototype
 		}
 		var constructor = createNamedFunction(name, function(...args){
@@ -4642,7 +4784,7 @@ var __embind_register_enum = (rawType, name, size, isSigned) => {
 	registerType(rawType, {
 		name, constructor: ctor, fromWireType: function(c){
 			return this.constructor.values[c]
-		}, toWireType: (destructors, c) => c.value, argPackAdvance: GenericWireTypeSize, readValueFromPointer: enumReadValueFromPointer(name, size, isSigned), destructorFunction: null
+		},toWireType: (destructors, c) => c.value, argPackAdvance: GenericWireTypeSize, readValueFromPointer: enumReadValueFromPointer(name, size, isSigned), destructorFunction: null
 	});
 	exposePublicSymbol(name, ctor)
 };
@@ -4675,7 +4817,7 @@ var embindRepr = v => {
 	var t = typeof v;
 	if(t === "object" || t === "array" || t === "function"){
 		return v.toString()
-	}else{
+	}else {
 		return "" + v
 	}
 };
@@ -4750,7 +4892,7 @@ function createJsInvoker(argTypes, isClassMethodFunc, returns, isAsync){
 	invokerFnBody += (returns || isAsync ? "var rv = " : "") + `invoker(${argsListWired});\n`;
 	if(needsDestructorStack){
 		invokerFnBody += "runDestructors(destructors);\n"
-	}else{
+	}else {
 		for(var i = isClassMethodFunc ? 1 : 2; i < argTypes.length; ++i){
 			var paramName = i === 1 ? "thisWired" : "arg" + (i - 2) + "Wired";
 			if(argTypes[i].destructorFunction !== null){
@@ -4761,7 +4903,7 @@ function createJsInvoker(argTypes, isClassMethodFunc, returns, isAsync){
 	}
 	if(returns){
 		invokerFnBody += "var ret = retType['fromWireType'](rv);\n" + "return ret;\n"
-	}else{}
+	}else {}
 	invokerFnBody += "}\n";
 	return [args1, invokerFnBody]
 }
@@ -4802,7 +4944,7 @@ var getFunctionName = signature => {
 	const argsIndex = signature.indexOf("(");
 	if(argsIndex !== -1){
 		return signature.substr(0, argsIndex)
-	}else{
+	}else {
 		return signature
 	}
 };
@@ -4813,7 +4955,7 @@ var __embind_register_function = (name, argCount, rawArgTypesAddr, signature, ra
 	rawInvoker = embind__requireFunction(signature, rawInvoker);
 	exposePublicSymbol(name, function(){
 		throwUnboundTypeError(`Cannot call ${name} due to unbound types`, argTypes)
-	}, argCount - 1);
+	},argCount - 1);
 	whenDependentTypesAreResolved([], argTypes, argTypes => {
 		var invokerArgsArray = [argTypes[0], null].concat(argTypes.slice(1));
 		replacePublicSymbol(name, craftInvokerFunction(name, invokerArgsArray, null, rawInvoker, fn, isAsync), argCount - 1);
@@ -4850,7 +4992,7 @@ var __embind_register_integer = (primitiveType, name, size, minRange, maxRange) 
 			checkAssertions(value, this.name);
 			return value >>> 0
 		}
-	}else{
+	}else {
 		toWireType = function(destructors, value){
 			checkAssertions(value, this.name);
 			return value
@@ -4872,7 +5014,7 @@ var __embind_register_memory_view = (rawType, dataTypeIndex, name) => {
 	name = readLatin1String(name);
 	registerType(rawType, {
 		name, fromWireType: decodeMemoryView, argPackAdvance: GenericWireTypeSize, readValueFromPointer: decodeMemoryView
-	}, {
+	},{
 		ignoreDuplicateRegistrations: true
 	})
 };
@@ -4893,14 +5035,14 @@ var __embind_register_std_string = (rawType, name) => {
 						var stringSegment = UTF8ToString(decodeStartPtr, maxRead);
 						if(str === undefined){
 							str = stringSegment
-						}else{
+						}else {
 							str += String.fromCharCode(0);
 							str += stringSegment
 						}
 						decodeStartPtr = currentBytePtr + 1
 					}
 				}
-			}else{
+			}else {
 				var a = new Array(length);
 				for(var i = 0; i < length; ++i){
 					a[i] = String.fromCharCode(HEAPU8[payload + i])
@@ -4909,7 +5051,7 @@ var __embind_register_std_string = (rawType, name) => {
 			}
 			_free(value);
 			return str
-		}, toWireType(destructors, value){
+		},toWireType(destructors, value){
 			if(value instanceof ArrayBuffer){
 				value = new Uint8Array(value)
 			}
@@ -4920,7 +5062,7 @@ var __embind_register_std_string = (rawType, name) => {
 			}
 			if(stdStringIsUTF8 && valueIsOfTypeString){
 				length = lengthBytesUTF8(value)
-			}else{
+			}else {
 				length = value.length
 			}
 			var base = _malloc(4 + length + 1);
@@ -4928,7 +5070,7 @@ var __embind_register_std_string = (rawType, name) => {
 			HEAPU32[base >> 2] = length;
 			if(stdStringIsUTF8 && valueIsOfTypeString){
 				stringToUTF8(value, ptr, length + 1)
-			}else{
+			}else {
 				if(valueIsOfTypeString){
 					for(var i = 0; i < length; ++i){
 						var charCode = value.charCodeAt(i);
@@ -4938,7 +5080,7 @@ var __embind_register_std_string = (rawType, name) => {
 						}
 						HEAPU8[ptr + i] = charCode
 					}
-				}else{
+				}else {
 					for(var i = 0; i < length; ++i){
 						HEAPU8[ptr + i] = value[i]
 					}
@@ -4948,7 +5090,7 @@ var __embind_register_std_string = (rawType, name) => {
 				destructors.push(_free, base)
 			}
 			return base
-		}, argPackAdvance: GenericWireTypeSize, readValueFromPointer: readPointer, destructorFunction(ptr){
+		},argPackAdvance: GenericWireTypeSize, readValueFromPointer: readPointer, destructorFunction(ptr){
 			_free(ptr)
 		}
 	})
@@ -4958,20 +5100,20 @@ var UTF16ToString = (ptr, maxBytesToRead) => {
 	var endPtr = ptr;
 	var idx = endPtr >> 1;
 	var maxIdx = idx + maxBytesToRead / 2;
-	while(!(idx >= maxIdx) && HEAPU16[idx])++idx;
+	while(!(idx >= maxIdx) && HEAPU16[idx]) ++idx;
 	endPtr = idx << 1;
-	if(endPtr - ptr > 32 && UTF16Decoder)return UTF16Decoder.decode(HEAPU8.subarray(ptr, endPtr));
+	if(endPtr - ptr > 32 && UTF16Decoder) return UTF16Decoder.decode(HEAPU8.subarray(ptr, endPtr));
 	var str = "";
 	for(var i = 0; !(i >= maxBytesToRead / 2); ++i){
 		var codeUnit = HEAP16[ptr + i * 2 >> 1];
-		if(codeUnit == 0)break;
+		if(codeUnit == 0) break;
 		str += String.fromCharCode(codeUnit)
 	}
-	return str;
+	return str
 };
 var stringToUTF16 = (str, outPtr, maxBytesToWrite) => {
 	maxBytesToWrite ??= 2147483647;
-	if(maxBytesToWrite < 2)return 0;
+	if(maxBytesToWrite < 2) return 0;
 	maxBytesToWrite -= 2;
 	var startPtr = outPtr;
 	var numCharsToWrite = maxBytesToWrite < str.length * 2 ? maxBytesToWrite / 2 : str.length;
@@ -4989,12 +5131,12 @@ var UTF32ToString = (ptr, maxBytesToRead) => {
 	var str = "";
 	while(!(i >= maxBytesToRead / 4)){
 		var utf32 = HEAP32[ptr + i * 4 >> 2];
-		if(utf32 == 0)break;
+		if(utf32 == 0) break;
 		++i;
 		if(utf32 >= 65536){
 			var ch = utf32 - 65536;
 			str += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023)
-		}else{
+		}else {
 			str += String.fromCharCode(utf32)
 		}
 	}
@@ -5002,7 +5144,7 @@ var UTF32ToString = (ptr, maxBytesToRead) => {
 };
 var stringToUTF32 = (str, outPtr, maxBytesToWrite) => {
 	maxBytesToWrite ??= 2147483647;
-	if(maxBytesToWrite < 4)return 0;
+	if(maxBytesToWrite < 4) return 0;
 	var startPtr = outPtr;
 	var endPtr = startPtr + maxBytesToWrite - 4;
 	for(var i = 0; i < str.length; ++i){
@@ -5013,19 +5155,19 @@ var stringToUTF32 = (str, outPtr, maxBytesToWrite) => {
 		}
 		HEAP32[outPtr >> 2] = codeUnit;
 		outPtr += 4;
-		if(outPtr + 4 > endPtr)break;
+		if(outPtr + 4 > endPtr) break
 	}
 	HEAP32[outPtr >> 2] = 0;
-	return outPtr - startPtr;
+	return outPtr - startPtr
 };
 var lengthBytesUTF32 = str => {
 	var len = 0;
 	for(var i = 0; i < str.length; ++i){
 		var codeUnit = str.charCodeAt(i);
 		if(codeUnit >= 55296 && codeUnit <= 57343) ++i;
-		len += 4;
+		len += 4
 	}
-	return len;
+	return len
 };
 var __embind_register_std_wstring = (rawType, charSize, name) => {
 	name = readLatin1String(name);
@@ -5053,7 +5195,7 @@ var __embind_register_std_wstring = (rawType, charSize, name) => {
 					var stringSegment = decodeString(decodeStartPtr, maxReadBytes);
 					if(str === undefined){
 						str = stringSegment
-					}else{
+					}else {
 						str += String.fromCharCode(0);
 						str += stringSegment
 					}
@@ -5062,7 +5204,7 @@ var __embind_register_std_wstring = (rawType, charSize, name) => {
 			}
 			_free(value);
 			return str
-		}, toWireType: (destructors, value) => {
+		},toWireType: (destructors, value) => {
 			if(!(typeof value == "string")){
 				throwBindingError(`Cannot pass non-string to C++ string type ${name}`)
 			}
@@ -5074,7 +5216,7 @@ var __embind_register_std_wstring = (rawType, charSize, name) => {
 				destructors.push(_free, ptr)
 			}
 			return ptr
-		}, argPackAdvance: GenericWireTypeSize, readValueFromPointer: readPointer, destructorFunction(ptr){
+		},argPackAdvance: GenericWireTypeSize, readValueFromPointer: readPointer, destructorFunction(ptr){
 			_free(ptr)
 		}
 	})
@@ -5116,7 +5258,40 @@ var __emscripten_runtime_keepalive_clear = () => {
 	runtimeKeepaliveCounter = 0
 };
 var __emscripten_system = command => {
-	if(!command)return 0;
+	if(ENVIRONMENT_IS_NODE){
+		if(!command) return 1;
+		var cmdstr = UTF8ToString(command);
+		if(!cmdstr.length) return 0;
+		var cp = require("child_process");
+		var ret = cp.spawnSync(cmdstr, [], {
+			shell: true,
+			stdio: "inherit"
+		});
+		var _W_EXITCODE = (ret, sig) => ret << 8 | sig;
+		if(ret.status === null){
+			var signalToNumber = sig => {
+				switch (sig){
+					case "SIGHUP":
+						return 1;
+					case "SIGQUIT":
+						return 3;
+					case "SIGFPE":
+						return 8;
+					case "SIGKILL":
+						return 9;
+					case "SIGALRM":
+						return 14;
+					case "SIGTERM":
+						return 15;
+					default:
+						return 2
+				}
+			};
+			return _W_EXITCODE(0, signalToNumber(ret.signal))
+		}
+		return _W_EXITCODE(ret.status, 0)
+	}
+	if(!command) return 0;
 	return -52
 };
 var __emscripten_throw_longjmp = () => {
@@ -5295,14 +5470,14 @@ var __mktime_js = function(tmPtr){
 function __mmap_js(len, prot, flags, fd, offset_low, offset_high, allocated, addr){
 	var offset = convertI32PairToI53Checked(offset_low, offset_high);
 	try{
-		if(isNaN(offset))return 61;
+		if(isNaN(offset)) return 61;
 		var stream = SYSCALLS.getStreamFromFD(fd);
 		var res = FS.mmap(stream, len, offset, prot, flags);
 		var ptr = res.ptr;
 		HEAP32[allocated >> 2] = res.allocated;
 		HEAPU32[addr >> 2] = ptr;
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
@@ -5315,69 +5490,11 @@ function __munmap_js(addr, len, prot, flags, fd, offset_low, offset_high){
 		if(prot & 2){
 			SYSCALLS.doMsync(addr, stream, len, flags, offset)
 		}
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return -e.errno
 	}
 }
-var timers = {};
-var handleException = e => {
-	if(e instanceof ExitStatus || e == "unwind"){
-		return EXITSTATUS
-	}
-	quit_(1, e)
-};
-var runtimeKeepaliveCounter = 0;
-var keepRuntimeAlive = () => noExitRuntime || runtimeKeepaliveCounter > 0;
-var _proc_exit = code => {
-	EXITSTATUS = code;
-	if(!keepRuntimeAlive()){
-		Module["onExit"]?.(code);
-		ABORT = true
-	}
-	quit_(code, new ExitStatus(code))
-};
-var exitJS = (status, implicit) => {
-	EXITSTATUS = status;
-	_proc_exit(status)
-};
-var _exit = exitJS;
-var maybeExit = () => {
-	if(!keepRuntimeAlive()){
-		try{
-			_exit(EXITSTATUS)
-		}catch(e){
-			handleException(e)
-		}
-	}
-};
-var callUserCallback = func => {
-	if(ABORT){
-		return
-	}
-	try{
-		func();
-		maybeExit()
-	}catch(e){
-		handleException(e)
-	}
-};
-var _emscripten_get_now = () => performance.now();
-var __setitimer_js = (which, timeout_ms) => {
-	if(timers[which]){
-		clearTimeout(timers[which].id);
-		delete timers[which]
-	}
-	if(!timeout_ms)return 0;
-	var id = setTimeout(() => {
-		delete timers[which];
-		callUserCallback(() => __emscripten_timeout(which, _emscripten_get_now()))
-	}, timeout_ms);
-	timers[which] = {
-		id, timeout_ms
-	};
-	return 0
-};
 var __tzset_js = (timezone, daylight, std_name, dst_name) => {
 	var currentYear = (new Date).getFullYear();
 	var winter = new Date(currentYear, 0, 1);
@@ -5399,7 +5516,7 @@ var __tzset_js = (timezone, daylight, std_name, dst_name) => {
 	if(summerOffset < winterOffset){
 		stringToUTF8(winterName, std_name, 17);
 		stringToUTF8(summerName, dst_name, 17)
-	}else{
+	}else {
 		stringToUTF8(winterName, dst_name, 17);
 		stringToUTF8(summerName, std_name, 17)
 	}
@@ -5407,6 +5524,7 @@ var __tzset_js = (timezone, daylight, std_name, dst_name) => {
 var _emscripten_date_now = () => Date.now();
 var getHeapMax = () => 2147483648;
 var _emscripten_get_heap_max = () => getHeapMax();
+var _emscripten_get_now = () => performance.now();
 var growMemory = size => {
 	var b = wasmMemory.buffer;
 	var pages = (size - b.byteLength + 65535) / 65536 | 0;
@@ -5414,7 +5532,7 @@ var growMemory = size => {
 		wasmMemory.grow(pages);
 		updateMemoryViews();
 		return 1
-	}catch(e){}
+	} catch (e){}
 };
 var _emscripten_resize_heap = requestedSize => {
 	var oldSize = HEAPU8.length;
@@ -5484,13 +5602,28 @@ var _environ_sizes_get = (penviron_count, penviron_buf_size) => {
 	HEAPU32[penviron_buf_size >> 2] = bufSize;
 	return 0
 };
+var runtimeKeepaliveCounter = 0;
+var keepRuntimeAlive = () => noExitRuntime || runtimeKeepaliveCounter > 0;
+var _proc_exit = code => {
+	EXITSTATUS = code;
+	if(!keepRuntimeAlive()){
+		Module["onExit"]?.(code);
+		ABORT = true
+	}
+	quit_(code, new ExitStatus(code))
+};
+var exitJS = (status, implicit) => {
+	EXITSTATUS = status;
+	_proc_exit(status)
+};
+var _exit = exitJS;
 
 function _fd_close(fd){
 	try{
 		var stream = SYSCALLS.getStreamFromFD(fd);
 		FS.close(stream);
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return e.errno
 	}
@@ -5509,7 +5642,7 @@ function _fd_fdstat_get(fd, pbuf){
 		tempI64 = [rightsBase >>> 0, (tempDouble = rightsBase, +Math.abs(tempDouble) >= 1 ? tempDouble > 0 ? +Math.floor(tempDouble / 4294967296) >>> 0 : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0 : 0)], HEAP32[pbuf + 8 >> 2] = tempI64[0], HEAP32[pbuf + 12 >> 2] = tempI64[1];
 		tempI64 = [rightsInheriting >>> 0, (tempDouble = rightsInheriting, +Math.abs(tempDouble) >= 1 ? tempDouble > 0 ? +Math.floor(tempDouble / 4294967296) >>> 0 : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0 : 0)], HEAP32[pbuf + 16 >> 2] = tempI64[0], HEAP32[pbuf + 20 >> 2] = tempI64[1];
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return e.errno
 	}
@@ -5521,9 +5654,9 @@ var doReadv = (stream, iov, iovcnt, offset) => {
 		var len = HEAPU32[iov + 4 >> 2];
 		iov += 8;
 		var curr = FS.read(stream, HEAP8, ptr, len, offset);
-		if(curr < 0)return -1;
+		if(curr < 0) return -1;
 		ret += curr;
-		if(curr < len)break;
+		if(curr < len) break;
 		if(typeof offset != "undefined"){
 			offset += curr
 		}
@@ -5534,12 +5667,12 @@ var doReadv = (stream, iov, iovcnt, offset) => {
 function _fd_pread(fd, iov, iovcnt, offset_low, offset_high, pnum){
 	var offset = convertI32PairToI53Checked(offset_low, offset_high);
 	try{
-		if(isNaN(offset))return 61;
+		if(isNaN(offset)) return 61;
 		var stream = SYSCALLS.getStreamFromFD(fd);
 		var num = doReadv(stream, iov, iovcnt, offset);
 		HEAPU32[pnum >> 2] = num;
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return e.errno
 	}
@@ -5551,7 +5684,7 @@ var doWritev = (stream, iov, iovcnt, offset) => {
 		var len = HEAPU32[iov + 4 >> 2];
 		iov += 8;
 		var curr = FS.write(stream, HEAP8, ptr, len, offset);
-		if(curr < 0)return -1;
+		if(curr < 0) return -1;
 		ret += curr;
 		if(curr < len){
 			break
@@ -5566,12 +5699,12 @@ var doWritev = (stream, iov, iovcnt, offset) => {
 function _fd_pwrite(fd, iov, iovcnt, offset_low, offset_high, pnum){
 	var offset = convertI32PairToI53Checked(offset_low, offset_high);
 	try{
-		if(isNaN(offset))return 61;
+		if(isNaN(offset)) return 61;
 		var stream = SYSCALLS.getStreamFromFD(fd);
 		var num = doWritev(stream, iov, iovcnt, offset);
 		HEAPU32[pnum >> 2] = num;
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return e.errno
 	}
@@ -5583,7 +5716,7 @@ function _fd_read(fd, iov, iovcnt, pnum){
 		var num = doReadv(stream, iov, iovcnt);
 		HEAPU32[pnum >> 2] = num;
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return e.errno
 	}
@@ -5592,13 +5725,13 @@ function _fd_read(fd, iov, iovcnt, pnum){
 function _fd_seek(fd, offset_low, offset_high, whence, newOffset){
 	var offset = convertI32PairToI53Checked(offset_low, offset_high);
 	try{
-		if(isNaN(offset))return 61;
+		if(isNaN(offset)) return 61;
 		var stream = SYSCALLS.getStreamFromFD(fd);
 		FS.llseek(stream, offset, whence);
 		tempI64 = [stream.position >>> 0, (tempDouble = stream.position, +Math.abs(tempDouble) >= 1 ? tempDouble > 0 ? +Math.floor(tempDouble / 4294967296) >>> 0 : ~~+Math.ceil((tempDouble - +(~~tempDouble >>> 0)) / 4294967296) >>> 0 : 0)], HEAP32[newOffset >> 2] = tempI64[0], HEAP32[newOffset + 4 >> 2] = tempI64[1];
 		if(stream.getdents && offset === 0 && whence === 0) stream.getdents = null;
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return e.errno
 	}
@@ -5611,7 +5744,7 @@ function _fd_sync(fd){
 			return stream.stream_ops.fsync(stream)
 		}
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return e.errno
 	}
@@ -5623,7 +5756,7 @@ function _fd_write(fd, iov, iovcnt, pnum){
 		var num = doWritev(stream, iov, iovcnt);
 		HEAPU32[pnum >> 2] = num;
 		return 0
-	}catch(e){
+	} catch (e){
 		if(typeof FS == "undefined" || !(e.name === "ErrnoError")) throw e;
 		return e.errno
 	}
@@ -5653,7 +5786,7 @@ var _getaddrinfo = (node, service, hint, out) => {
 		HEAPU32[ai + 20 >> 2] = sa;
 		if(family === 10){
 			HEAP32[ai + 16 >> 2] = 28
-		}else{
+		}else {
 			HEAP32[ai + 16 >> 2] = 16
 		}
 		HEAP32[ai + 28 >> 2] = 0;
@@ -5712,7 +5845,7 @@ var _getaddrinfo = (node, service, hint, out) => {
 		if((flags & 1) === 0){
 			if(family === 2){
 				addr = _htonl(2130706433)
-			}else{
+			}else {
 				addr = [0, 0, 0, _htonl(1)]
 			}
 		}
@@ -5728,15 +5861,15 @@ var _getaddrinfo = (node, service, hint, out) => {
 		}else if(family === 10 && flags & 8){
 			addr = [0, 0, _htonl(65535), addr];
 			family = 10
-		}else{
+		}else {
 			return -2
 		}
-	}else{
+	}else {
 		addr = inetPton6(node);
 		if(addr !== null){
 			if(family === 0 || family === 10){
 				family = 10
-			}else{
+			}else {
 				return -2
 			}
 		}
@@ -5763,6 +5896,12 @@ var _getaddrinfo = (node, service, hint, out) => {
 var _getentropy = (buffer, size) => {
 	randomFill(HEAPU8.subarray(buffer, buffer + size));
 	return 0
+};
+var handleException = e => {
+	if(e instanceof ExitStatus || e == "unwind"){
+		return EXITSTATUS
+	}
+	quit_(1, e)
 };
 var stackAlloc = sz => __emscripten_stack_alloc(sz);
 var stringToUTF8OnStack = str => {
@@ -5793,10 +5932,10 @@ init_emval();
 var wasmImports = {
 	a: ___assert_fail,
 	na: ___call_sighandler,
-	H: ___cxa_find_matching_catch_2,
+	G: ___cxa_find_matching_catch_2,
 	g: ___cxa_throw,
-	G: ___resumeException,
-	Q: ___syscall_chmod,
+	F: ___resumeException,
+	R: ___syscall_chmod,
 	ba: ___syscall_connect,
 	Aa: ___syscall_faccessat,
 	Xa: ___syscall_fallocate,
@@ -5807,39 +5946,39 @@ var wasmImports = {
 	ra: ___syscall_getcwd,
 	ma: ___syscall_getdents64,
 	Da: ___syscall_ioctl,
-	ua: ___syscall_lstat64,
+	ta: ___syscall_lstat64,
 	qa: ___syscall_mkdirat,
-	ta: ___syscall_newfstatat,
-	P: ___syscall_openat,
+	ua: ___syscall_newfstatat,
+	Q: ___syscall_openat,
 	la: ___syscall_readlinkat,
-	lb: ___syscall_recvfrom,
+	kb: ___syscall_recvfrom,
 	ka: ___syscall_renameat,
-	N: ___syscall_rmdir,
-	kb: ___syscall_sendto,
+	O: ___syscall_rmdir,
+	jb: ___syscall_sendto,
 	aa: ___syscall_socket,
 	va: ___syscall_stat64,
 	ia: ___syscall_symlink,
-	O: ___syscall_unlinkat,
+	P: ___syscall_unlinkat,
 	fa: ___syscall_utimensat,
 	Ba: __abort_js,
 	Pa: __embind_finalize_value_object,
 	db: __embind_register_bigint,
 	Ja: __embind_register_bool,
-	K: __embind_register_class,
+	L: __embind_register_class,
 	Ia: __embind_register_emval,
 	w: __embind_register_enum,
 	f: __embind_register_enum_value,
-	U: __embind_register_float,
+	V: __embind_register_float,
 	p: __embind_register_function,
 	v: __embind_register_integer,
 	o: __embind_register_memory_view,
-	V: __embind_register_std_string,
-	I: __embind_register_std_wstring,
+	U: __embind_register_std_string,
+	J: __embind_register_std_wstring,
 	Qa: __embind_register_value_object,
-	J: __embind_register_value_object_field,
+	K: __embind_register_value_object_field,
 	Ka: __embind_register_void,
-	za: __emscripten_get_now_is_monotonic,
-	ya: __emscripten_memcpy_js,
+	ya: __emscripten_get_now_is_monotonic,
+	za: __emscripten_memcpy_js,
 	oa: __emscripten_runtime_keepalive_clear,
 	ga: __emscripten_system,
 	ca: __emscripten_throw_longjmp,
@@ -5849,7 +5988,7 @@ var wasmImports = {
 	Oa: __emval_incref,
 	W: __emval_new_array,
 	y: __emval_new_cstring,
-	D: __emval_new_object,
+	C: __emval_new_object,
 	La: __emval_run_destructors,
 	x: __emval_set_property,
 	q: __emval_take_value,
@@ -5858,11 +5997,10 @@ var wasmImports = {
 	ab: __mktime_js,
 	Ya: __mmap_js,
 	Za: __munmap_js,
-	jb: __setitimer_js,
 	pa: __tzset_js,
 	A: _emscripten_date_now,
 	ha: _emscripten_get_heap_max,
-	C: _emscripten_get_now,
+	H: _emscripten_get_now,
 	da: _emscripten_resize_heap,
 	Ea: _environ_get,
 	Fa: _environ_sizes_get,
@@ -5874,18 +6012,18 @@ var wasmImports = {
 	S: _fd_read,
 	bb: _fd_seek,
 	sa: _fd_sync,
-	R: _fd_write,
+	I: _fd_write,
 	$: _getaddrinfo,
 	Ra: _getentropy,
-	M: invoke_dii,
+	N: invoke_dii,
 	u: invoke_i,
-	E: invoke_id,
+	D: invoke_id,
 	c: invoke_ii,
 	Sa: invoke_iifi,
 	d: invoke_iii,
 	e: invoke_iiii,
 	i: invoke_iiiii,
-	F: invoke_iiiiii,
+	E: invoke_iiiiii,
 	b: invoke_iiiiiii,
 	_: invoke_iiiiiiii,
 	m: invoke_iiiiiiiii,
@@ -5906,62 +6044,61 @@ var wasmImports = {
 	r: invoke_viiiii,
 	X: invoke_viiiiii,
 	T: invoke_viiiiiii,
-	L: invoke_viiiiiiiii,
+	M: invoke_viiiiiiiii,
 	Ha: invoke_viiiiiiiiiiiii,
 	Ga: invoke_viiiiiiiiiiiiiii,
 	eb: invoke_vij,
 	Ca: _proc_exit
 };
 var wasmExports = createWasm();
-var ___wasm_call_ctors = () => (___wasm_call_ctors = wasmExports["nb"])();
-var ___getTypeName = a0 => (___getTypeName = wasmExports["ob"])(a0);
-var _main = Module["_main"] = (a0, a1) => (_main = Module["_main"] = wasmExports["pb"])(a0, a1);
-var _free = a0 => (_free = wasmExports["rb"])(a0);
-var _malloc = a0 => (_malloc = wasmExports["sb"])(a0);
-var _ntohs = a0 => (_ntohs = wasmExports["tb"])(a0);
-var _htonl = a0 => (_htonl = wasmExports["ub"])(a0);
-var _htons = a0 => (_htons = wasmExports["vb"])(a0);
-var ___cxa_can_catch = (a0, a1, a2) => (___cxa_can_catch = wasmExports["wb"])(a0, a1, a2);
-var _emscripten_builtin_memalign = (a0, a1) => (_emscripten_builtin_memalign = wasmExports["xb"])(a0, a1);
-var __emscripten_timeout = (a0, a1) => (__emscripten_timeout = wasmExports["yb"])(a0, a1);
-var _setThrew = (a0, a1) => (_setThrew = wasmExports["zb"])(a0, a1);
-var __emscripten_tempret_set = a0 => (__emscripten_tempret_set = wasmExports["Ab"])(a0);
-var __emscripten_stack_restore = a0 => (__emscripten_stack_restore = wasmExports["Bb"])(a0);
-var __emscripten_stack_alloc = a0 => (__emscripten_stack_alloc = wasmExports["Cb"])(a0);
-var _emscripten_stack_get_current = () => (_emscripten_stack_get_current = wasmExports["Db"])();
-var dynCall_jiji = Module["dynCall_jiji"] = (a0, a1, a2, a3, a4) => (dynCall_jiji = Module["dynCall_jiji"] = wasmExports["Eb"])(a0, a1, a2, a3, a4);
-var dynCall_ji = Module["dynCall_ji"] = (a0, a1) => (dynCall_ji = Module["dynCall_ji"] = wasmExports["Fb"])(a0, a1);
-var dynCall_iiijj = Module["dynCall_iiijj"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_iiijj = Module["dynCall_iiijj"] = wasmExports["Gb"])(a0, a1, a2, a3, a4, a5, a6);
-var dynCall_iij = Module["dynCall_iij"] = (a0, a1, a2, a3) => (dynCall_iij = Module["dynCall_iij"] = wasmExports["Hb"])(a0, a1, a2, a3);
-var dynCall_vij = Module["dynCall_vij"] = (a0, a1, a2, a3) => (dynCall_vij = Module["dynCall_vij"] = wasmExports["Ib"])(a0, a1, a2, a3);
-var dynCall_viij = Module["dynCall_viij"] = (a0, a1, a2, a3, a4) => (dynCall_viij = Module["dynCall_viij"] = wasmExports["Jb"])(a0, a1, a2, a3, a4);
-var dynCall_jjii = Module["dynCall_jjii"] = (a0, a1, a2, a3, a4) => (dynCall_jjii = Module["dynCall_jjii"] = wasmExports["Kb"])(a0, a1, a2, a3, a4);
-var dynCall_iijji = Module["dynCall_iijji"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_iijji = Module["dynCall_iijji"] = wasmExports["Lb"])(a0, a1, a2, a3, a4, a5, a6);
-var dynCall_iiji = Module["dynCall_iiji"] = (a0, a1, a2, a3, a4) => (dynCall_iiji = Module["dynCall_iiji"] = wasmExports["Mb"])(a0, a1, a2, a3, a4);
-var dynCall_jijj = Module["dynCall_jijj"] = (a0, a1, a2, a3, a4, a5) => (dynCall_jijj = Module["dynCall_jijj"] = wasmExports["Nb"])(a0, a1, a2, a3, a4, a5);
-var dynCall_vijj = Module["dynCall_vijj"] = (a0, a1, a2, a3, a4, a5) => (dynCall_vijj = Module["dynCall_vijj"] = wasmExports["Ob"])(a0, a1, a2, a3, a4, a5);
-var dynCall_jii = Module["dynCall_jii"] = (a0, a1, a2) => (dynCall_jii = Module["dynCall_jii"] = wasmExports["Pb"])(a0, a1, a2);
-var dynCall_jiiiii = Module["dynCall_jiiiii"] = (a0, a1, a2, a3, a4, a5) => (dynCall_jiiiii = Module["dynCall_jiiiii"] = wasmExports["Qb"])(a0, a1, a2, a3, a4, a5);
-var dynCall_ij = Module["dynCall_ij"] = (a0, a1, a2) => (dynCall_ij = Module["dynCall_ij"] = wasmExports["Rb"])(a0, a1, a2);
-var dynCall_iiijii = Module["dynCall_iiijii"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_iiijii = Module["dynCall_iiijii"] = wasmExports["Sb"])(a0, a1, a2, a3, a4, a5, a6);
-var dynCall_iiij = Module["dynCall_iiij"] = (a0, a1, a2, a3, a4) => (dynCall_iiij = Module["dynCall_iiij"] = wasmExports["Tb"])(a0, a1, a2, a3, a4);
-var dynCall_iiiji = Module["dynCall_iiiji"] = (a0, a1, a2, a3, a4, a5) => (dynCall_iiiji = Module["dynCall_iiiji"] = wasmExports["Ub"])(a0, a1, a2, a3, a4, a5);
-var dynCall_iiiij = Module["dynCall_iiiij"] = (a0, a1, a2, a3, a4, a5) => (dynCall_iiiij = Module["dynCall_iiiij"] = wasmExports["Vb"])(a0, a1, a2, a3, a4, a5);
-var dynCall_viji = Module["dynCall_viji"] = (a0, a1, a2, a3, a4) => (dynCall_viji = Module["dynCall_viji"] = wasmExports["Wb"])(a0, a1, a2, a3, a4);
-var dynCall_jiiiji = Module["dynCall_jiiiji"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_jiiiji = Module["dynCall_jiiiji"] = wasmExports["Xb"])(a0, a1, a2, a3, a4, a5, a6);
-var dynCall_jiiji = Module["dynCall_jiiji"] = (a0, a1, a2, a3, a4, a5) => (dynCall_jiiji = Module["dynCall_jiiji"] = wasmExports["Yb"])(a0, a1, a2, a3, a4, a5);
-var dynCall_jj = Module["dynCall_jj"] = (a0, a1, a2) => (dynCall_jj = Module["dynCall_jj"] = wasmExports["Zb"])(a0, a1, a2);
-var dynCall_jiij = Module["dynCall_jiij"] = (a0, a1, a2, a3, a4) => (dynCall_jiij = Module["dynCall_jiij"] = wasmExports["_b"])(a0, a1, a2, a3, a4);
-var dynCall_viijii = Module["dynCall_viijii"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_viijii = Module["dynCall_viijii"] = wasmExports["$b"])(a0, a1, a2, a3, a4, a5, a6);
-var dynCall_iiiiij = Module["dynCall_iiiiij"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_iiiiij = Module["dynCall_iiiiij"] = wasmExports["ac"])(a0, a1, a2, a3, a4, a5, a6);
-var dynCall_iiiiijj = Module["dynCall_iiiiijj"] = (a0, a1, a2, a3, a4, a5, a6, a7, a8) => (dynCall_iiiiijj = Module["dynCall_iiiiijj"] = wasmExports["bc"])(a0, a1, a2, a3, a4, a5, a6, a7, a8);
-var dynCall_iiiiiijj = Module["dynCall_iiiiiijj"] = (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) => (dynCall_iiiiiijj = Module["dynCall_iiiiiijj"] = wasmExports["cc"])(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9);
+var ___wasm_call_ctors = () => (___wasm_call_ctors = wasmExports["mb"])();
+var ___getTypeName = a0 => (___getTypeName = wasmExports["nb"])(a0);
+var _main = Module["_main"] = (a0, a1) => (_main = Module["_main"] = wasmExports["ob"])(a0, a1);
+var _free = a0 => (_free = wasmExports["qb"])(a0);
+var _malloc = a0 => (_malloc = wasmExports["rb"])(a0);
+var _ntohs = a0 => (_ntohs = wasmExports["sb"])(a0);
+var _htonl = a0 => (_htonl = wasmExports["tb"])(a0);
+var _htons = a0 => (_htons = wasmExports["ub"])(a0);
+var ___cxa_can_catch = (a0, a1, a2) => (___cxa_can_catch = wasmExports["vb"])(a0, a1, a2);
+var _emscripten_builtin_memalign = (a0, a1) => (_emscripten_builtin_memalign = wasmExports["wb"])(a0, a1);
+var _setThrew = (a0, a1) => (_setThrew = wasmExports["xb"])(a0, a1);
+var __emscripten_tempret_set = a0 => (__emscripten_tempret_set = wasmExports["yb"])(a0);
+var __emscripten_stack_restore = a0 => (__emscripten_stack_restore = wasmExports["zb"])(a0);
+var __emscripten_stack_alloc = a0 => (__emscripten_stack_alloc = wasmExports["Ab"])(a0);
+var _emscripten_stack_get_current = () => (_emscripten_stack_get_current = wasmExports["Bb"])();
+var dynCall_jiji = Module["dynCall_jiji"] = (a0, a1, a2, a3, a4) => (dynCall_jiji = Module["dynCall_jiji"] = wasmExports["Cb"])(a0, a1, a2, a3, a4);
+var dynCall_ji = Module["dynCall_ji"] = (a0, a1) => (dynCall_ji = Module["dynCall_ji"] = wasmExports["Db"])(a0, a1);
+var dynCall_iiijj = Module["dynCall_iiijj"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_iiijj = Module["dynCall_iiijj"] = wasmExports["Eb"])(a0, a1, a2, a3, a4, a5, a6);
+var dynCall_iij = Module["dynCall_iij"] = (a0, a1, a2, a3) => (dynCall_iij = Module["dynCall_iij"] = wasmExports["Fb"])(a0, a1, a2, a3);
+var dynCall_vij = Module["dynCall_vij"] = (a0, a1, a2, a3) => (dynCall_vij = Module["dynCall_vij"] = wasmExports["Gb"])(a0, a1, a2, a3);
+var dynCall_viij = Module["dynCall_viij"] = (a0, a1, a2, a3, a4) => (dynCall_viij = Module["dynCall_viij"] = wasmExports["Hb"])(a0, a1, a2, a3, a4);
+var dynCall_jjii = Module["dynCall_jjii"] = (a0, a1, a2, a3, a4) => (dynCall_jjii = Module["dynCall_jjii"] = wasmExports["Ib"])(a0, a1, a2, a3, a4);
+var dynCall_iijji = Module["dynCall_iijji"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_iijji = Module["dynCall_iijji"] = wasmExports["Jb"])(a0, a1, a2, a3, a4, a5, a6);
+var dynCall_iiji = Module["dynCall_iiji"] = (a0, a1, a2, a3, a4) => (dynCall_iiji = Module["dynCall_iiji"] = wasmExports["Kb"])(a0, a1, a2, a3, a4);
+var dynCall_jijj = Module["dynCall_jijj"] = (a0, a1, a2, a3, a4, a5) => (dynCall_jijj = Module["dynCall_jijj"] = wasmExports["Lb"])(a0, a1, a2, a3, a4, a5);
+var dynCall_vijj = Module["dynCall_vijj"] = (a0, a1, a2, a3, a4, a5) => (dynCall_vijj = Module["dynCall_vijj"] = wasmExports["Mb"])(a0, a1, a2, a3, a4, a5);
+var dynCall_jii = Module["dynCall_jii"] = (a0, a1, a2) => (dynCall_jii = Module["dynCall_jii"] = wasmExports["Nb"])(a0, a1, a2);
+var dynCall_jiiiii = Module["dynCall_jiiiii"] = (a0, a1, a2, a3, a4, a5) => (dynCall_jiiiii = Module["dynCall_jiiiii"] = wasmExports["Ob"])(a0, a1, a2, a3, a4, a5);
+var dynCall_ij = Module["dynCall_ij"] = (a0, a1, a2) => (dynCall_ij = Module["dynCall_ij"] = wasmExports["Pb"])(a0, a1, a2);
+var dynCall_iiijii = Module["dynCall_iiijii"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_iiijii = Module["dynCall_iiijii"] = wasmExports["Qb"])(a0, a1, a2, a3, a4, a5, a6);
+var dynCall_iiij = Module["dynCall_iiij"] = (a0, a1, a2, a3, a4) => (dynCall_iiij = Module["dynCall_iiij"] = wasmExports["Rb"])(a0, a1, a2, a3, a4);
+var dynCall_iiiji = Module["dynCall_iiiji"] = (a0, a1, a2, a3, a4, a5) => (dynCall_iiiji = Module["dynCall_iiiji"] = wasmExports["Sb"])(a0, a1, a2, a3, a4, a5);
+var dynCall_iiiij = Module["dynCall_iiiij"] = (a0, a1, a2, a3, a4, a5) => (dynCall_iiiij = Module["dynCall_iiiij"] = wasmExports["Tb"])(a0, a1, a2, a3, a4, a5);
+var dynCall_viji = Module["dynCall_viji"] = (a0, a1, a2, a3, a4) => (dynCall_viji = Module["dynCall_viji"] = wasmExports["Ub"])(a0, a1, a2, a3, a4);
+var dynCall_viijii = Module["dynCall_viijii"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_viijii = Module["dynCall_viijii"] = wasmExports["Vb"])(a0, a1, a2, a3, a4, a5, a6);
+var dynCall_iiiiij = Module["dynCall_iiiiij"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_iiiiij = Module["dynCall_iiiiij"] = wasmExports["Wb"])(a0, a1, a2, a3, a4, a5, a6);
+var dynCall_iiiiijj = Module["dynCall_iiiiijj"] = (a0, a1, a2, a3, a4, a5, a6, a7, a8) => (dynCall_iiiiijj = Module["dynCall_iiiiijj"] = wasmExports["Xb"])(a0, a1, a2, a3, a4, a5, a6, a7, a8);
+var dynCall_iiiiiijj = Module["dynCall_iiiiiijj"] = (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) => (dynCall_iiiiiijj = Module["dynCall_iiiiiijj"] = wasmExports["Yb"])(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9);
+var dynCall_jiiiji = Module["dynCall_jiiiji"] = (a0, a1, a2, a3, a4, a5, a6) => (dynCall_jiiiji = Module["dynCall_jiiiji"] = wasmExports["Zb"])(a0, a1, a2, a3, a4, a5, a6);
+var dynCall_jiiji = Module["dynCall_jiiji"] = (a0, a1, a2, a3, a4, a5) => (dynCall_jiiji = Module["dynCall_jiiji"] = wasmExports["_b"])(a0, a1, a2, a3, a4, a5);
+var dynCall_jj = Module["dynCall_jj"] = (a0, a1, a2) => (dynCall_jj = Module["dynCall_jj"] = wasmExports["$b"])(a0, a1, a2);
+var dynCall_jiij = Module["dynCall_jiij"] = (a0, a1, a2, a3, a4) => (dynCall_jiij = Module["dynCall_jiij"] = wasmExports["ac"])(a0, a1, a2, a3, a4);
 
 function invoke_iii(index, a1, a2){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -5972,7 +6109,7 @@ function invoke_iiiii(index, a1, a2, a3, a4){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3, a4)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -5983,7 +6120,7 @@ function invoke_ii(index, a1){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -5994,7 +6131,7 @@ function invoke_iiiiiiiii(index, a1, a2, a3, a4, a5, a6, a7, a8){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6005,7 +6142,7 @@ function invoke_vii(index, a1, a2){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6016,7 +6153,7 @@ function invoke_iiii(index, a1, a2, a3){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6027,7 +6164,7 @@ function invoke_iiiiiii(index, a1, a2, a3, a4, a5, a6){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6038,7 +6175,7 @@ function invoke_vi(index, a1){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6049,7 +6186,7 @@ function invoke_viii(index, a1, a2, a3){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6060,7 +6197,7 @@ function invoke_i(index){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)()
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6071,7 +6208,7 @@ function invoke_viiii(index, a1, a2, a3, a4){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3, a4)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6082,7 +6219,7 @@ function invoke_iiiiii(index, a1, a2, a3, a4, a5){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3, a4, a5)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6093,7 +6230,7 @@ function invoke_dii(index, a1, a2){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6104,7 +6241,7 @@ function invoke_v(index){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)()
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6115,7 +6252,7 @@ function invoke_viiiii(index, a1, a2, a3, a4, a5){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3, a4, a5)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6126,7 +6263,7 @@ function invoke_iiiiiiii(index, a1, a2, a3, a4, a5, a6, a7){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6137,7 +6274,7 @@ function invoke_iiiiiiiiii(index, a1, a2, a3, a4, a5, a6, a7, a8, a9){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8, a9)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6148,7 +6285,7 @@ function invoke_viid(index, a1, a2, a3){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6159,7 +6296,7 @@ function invoke_viidddddddd(index, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6170,7 +6307,7 @@ function invoke_iiiiiiiiiii(index, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6181,7 +6318,7 @@ function invoke_id(index, a1){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6192,7 +6329,7 @@ function invoke_iifi(index, a1, a2, a3){
 	var sp = stackSave();
 	try{
 		return getWasmTableEntry(index)(a1, a2, a3)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6203,7 +6340,7 @@ function invoke_viiiiiiiii(index, a1, a2, a3, a4, a5, a6, a7, a8, a9){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8, a9)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6214,7 +6351,7 @@ function invoke_viiiiii(index, a1, a2, a3, a4, a5, a6){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6225,7 +6362,7 @@ function invoke_viiiiiiiiiiiii(index, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6236,7 +6373,7 @@ function invoke_viiiiiiiiiiiiiii(index, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10,
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6247,7 +6384,7 @@ function invoke_viiiiiii(index, a1, a2, a3, a4, a5, a6, a7){
 	var sp = stackSave();
 	try{
 		getWasmTableEntry(index)(a1, a2, a3, a4, a5, a6, a7)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6258,7 +6395,7 @@ function invoke_jiji(index, a1, a2, a3, a4){
 	var sp = stackSave();
 	try{
 		return dynCall_jiji(index, a1, a2, a3, a4)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6269,7 +6406,7 @@ function invoke_ji(index, a1){
 	var sp = stackSave();
 	try{
 		return dynCall_ji(index, a1)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6280,7 +6417,7 @@ function invoke_iiijj(index, a1, a2, a3, a4, a5, a6){
 	var sp = stackSave();
 	try{
 		return dynCall_iiijj(index, a1, a2, a3, a4, a5, a6)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6291,7 +6428,7 @@ function invoke_iij(index, a1, a2, a3){
 	var sp = stackSave();
 	try{
 		return dynCall_iij(index, a1, a2, a3)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6302,7 +6439,7 @@ function invoke_vij(index, a1, a2, a3){
 	var sp = stackSave();
 	try{
 		dynCall_vij(index, a1, a2, a3)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6313,7 +6450,7 @@ function invoke_iiji(index, a1, a2, a3, a4){
 	var sp = stackSave();
 	try{
 		return dynCall_iiji(index, a1, a2, a3, a4)
-	}catch(e){
+	} catch (e){
 		stackRestore(sp);
 		if(e !== e + 0) throw e;
 		_setThrew(1, 0)
@@ -6341,7 +6478,7 @@ function callMain(args = []){
 		var ret = entryFunction(argc, argv);
 		exitJS(ret, true);
 		return ret
-	}catch(e){
+	} catch (e){
 		return handleException(e)
 	}
 };
@@ -6360,10 +6497,10 @@ function run(args = arguments_){
 	}
 
 	function doRun(){
-		if(calledRun)return;
+		if(calledRun) return;
 		calledRun = 1;
 		Module["calledRun"] = 1;
-		if(ABORT)return;
+		if(ABORT) return;
 		initRuntime();
 		preMain();
 		Module["onRuntimeInitialized"]?.();
@@ -6375,8 +6512,8 @@ function run(args = arguments_){
 		setTimeout(() => {
 			setTimeout(() => Module["setStatus"](""), 1);
 			doRun()
-		}, 1)
-	}else{
+		},1)
+	}else {
 		doRun()
 	}
 }

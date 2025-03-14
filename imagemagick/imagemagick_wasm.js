@@ -21,6 +21,15 @@
 * @grant に GM_xmlhttpRequest を追加してください。
 * unsefe-evalが使える環境でのみ動作します(そうでないとwasmが実行できない(EMBIND_AOT試してみたけどうまくいかなかった))。
 * apiは https://github.com/KnicKnic/WASM-ImageMagick のコードを参考にし(ほぼパクっ)ているので、詳しい使い方は https://github.com/KnicKnic/WASM-ImageMagick/tree/master/apidocs で確認してください。
+* 私のビルドしたimagemagickは
+Version: ImageMagick 7.1.1-45 Q16-HDRI x86_64 3cbce5696:20250308 https://imagemagick.org
+Copyright: (C) 1999 ImageMagick Studio LLC
+License: https://imagemagick.org/script/license.php
+Features: Channel-masks(64-bit) Cipher DPC HDRI
+Delegates (built-in): bzlib fontconfig freetype heic jng jpeg jxl lzma png raw tiff webp xml zip zlib zstd
+Compiler: clang (19.1.2)
+* となっています。
+* 通常このバージョンではconvertコマンドが非推奨でwarningが出るのですが、このビルドではwarningが出ないようにしておきました。
 */
 
 (function(global){
