@@ -3865,30 +3865,13 @@ let currentJavascriptURL = './magickApi.js';
 	let stacktrace$$1 = stacktrace.getSync();
 	currentJavascriptURL = stacktrace$$1[0].fileName;
 }
-function arrayBufferToBase64(buffer) {
-	let binary = '';
-	const bytes = new Uint8Array(buffer);
-	for (let i = 0; i < bytes.byteLength; i++) {
-		binary += String.fromCharCode(bytes[i]);
-	}
-	return btoa(binary);
-}
 const cachedJs = (await getFromIndexedDB('ImageMagickWasm', 'magickJs', 522))?.data;
 const cachedWasm = (await getFromIndexedDB('ImageMagickWasm', 'magickWasm', 522))?.data;
-const wasmBase64 = arrayBufferToBase64(cachedWasm);
+const wasmUrl = URL.createObjectURL(new Blob([cachedWasm], { type: 'application/wasm' }));
 const modifiedJs = `
-function base64ToArrayBuffer(base64) {
-  const binary_string = atob(base64);
-  const len = binary_string.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary_string.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
+const wasmUrl = "${wasmUrl}";
 if (typeof Module == 'undefined') {
 	Module = {
-		wasmBinary: base64ToArrayBuffer("${wasmBase64}"),
 		noInitialRun: true,
 		moduleLoaded: false,
 		messagesToProcess: [],
@@ -3933,6 +3916,7 @@ let magickWorker;
 if(modifiedJsBlobUrl){
 	magickWorker = new Worker(modifiedJsBlobUrl);
 	URL.revokeObjectURL(modifiedJsBlobUrl);
+	URL.revokeObjectURL(wasmUrl);
 }else if(currentJavascriptURL.startsWith('http')){
 	magickWorker = new Worker(window.URL.createObjectURL(new Blob([GenerateMagickWorkerText(magickWorkerUrl)])));
 }else{

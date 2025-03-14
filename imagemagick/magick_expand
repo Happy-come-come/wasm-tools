@@ -242,7 +242,9 @@ function findWasmBinary(){
 	return f
 }
 var wasmBinaryFile;
-
+try{
+	wasmBinaryFile = wasmUrl;
+}catch{}
 function getBinarySync(file){
 	if(file == wasmBinaryFile && wasmBinary){
 		return new Uint8Array(wasmBinary)

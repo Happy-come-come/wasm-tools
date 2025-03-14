@@ -8,7 +8,6 @@
 // @match			*://*/*
 // @connect			raw.githubusercontent.com
 // @grant			GM_xmlhttpRequest
-// @connect			raw.githubusercontent.com
 // ==/UserScript==
 
 /*
