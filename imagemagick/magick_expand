@@ -274,6 +274,7 @@ function instantiateAsync(binary, binaryFile, imports, callback){
 		return fetch(binaryFile, {
 			credentials: "same-origin"
 		}).then(response => {
+			try{URL.revokeObjectURL(wasmUrl)}catch{};
 			var result = WebAssembly.instantiateStreaming(response, imports);
 			return result.then(callback, function(reason){
 				err(`wasm streaming compile failed: ${reason}`);

@@ -3916,7 +3916,6 @@ let magickWorker;
 if(modifiedJsBlobUrl){
 	magickWorker = new Worker(modifiedJsBlobUrl);
 	URL.revokeObjectURL(modifiedJsBlobUrl);
-	URL.revokeObjectURL(wasmUrl);
 }else if(currentJavascriptURL.startsWith('http')){
 	magickWorker = new Worker(window.URL.createObjectURL(new Blob([GenerateMagickWorkerText(magickWorkerUrl)])));
 }else{
