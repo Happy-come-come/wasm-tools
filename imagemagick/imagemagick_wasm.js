@@ -14,12 +14,12 @@
 * このファイルはtampermonkeyで @require で読み込むことを想定しています。
 * GM_xmlhttpRequest が使える環境でのみ動作します。
 * このファイルは Emscripten で生成された wasm ファイルを読み込むためのヘルパークラスです。
-* const magick = await new ImageMagickWasm().load();
+* const magickWasm = new ImageMagickWasm();
+* const magick = await magickWasm.load();
 * でモジュールを読み込むことができます。
 * await magick.execute({commands: ['convert --version']});
 * でのような感じで ImageMagick のコマンドを実行することができます。
 * @grant に GM_xmlhttpRequest を追加してください。
-* unsefe-evalが使える環境でのみ動作します(そうでないとwasmが実行できない(EMBIND_AOT試してみたけどうまくいかなかった))。
 * apiは https://github.com/KnicKnic/WASM-ImageMagick のコードを参考にし(ほぼパクっ)ているので、詳しい使い方は https://github.com/KnicKnic/WASM-ImageMagick/tree/master/apidocs で確認してください。
 * 私のビルドしたimagemagickは
 Version: ImageMagick 7.1.1-45 Q16-HDRI x86_64 3cbce5696:20250308 https://imagemagick.org
@@ -30,6 +30,11 @@ Delegates (built-in): bzlib fontconfig freetype heic jng jpeg jxl lzma png raw t
 Compiler: clang (19.1.2)
 * となっています。
 * 通常このバージョンではconvertコマンドが非推奨でwarningが出るのですが、このビルドではwarningが出ないようにしておきました。
+* コマンドは、
+* magick convert --version
+* のように実行することもできますし、
+* convert --version
+* のように実行することもできます。
 */
 
 (function(global){
