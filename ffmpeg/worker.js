@@ -16,15 +16,13 @@ var load = async ({
 	workerURL: _workerURL
 }) => {
 	const first = !ffmpeg;
-	try {
-		if (!_coreURL)
-			_coreURL = CORE_URL;
+	try{
+		if(!_coreURL)_coreURL = CORE_URL;
 		importScripts(_coreURL);
-	} catch {
-		if (!_coreURL || _coreURL === CORE_URL)
-			_coreURL = CORE_URL.replace("/umd/", "/esm/");
+	}catch{
+		if(!_coreURL || _coreURL === CORE_URL)_coreURL = CORE_URL.replace("/umd/", "/esm/");
 		self.createFFmpegCore = (await import(_coreURL)).default;
-		if (!self.createFFmpegCore) {
+		if(!self.createFFmpegCore){
 			throw ERROR_IMPORT_FAILURE;
 		}
 	}
@@ -75,7 +73,7 @@ var createDir = ({ path }) => {
 var listDir = ({ path }) => {
 	const names = ffmpeg.FS.readdir(path);
 	const nodes = [];
-	for (const name of names) {
+	for(const name of names){
 		const stat = ffmpeg.FS.stat(`${path}/${name}`);
 		const isDir = ffmpeg.FS.isDir(stat.mode);
 		nodes.push({ name, isDir });
@@ -89,8 +87,7 @@ var deleteDir = ({ path }) => {
 var mount = ({ fsType, options, mountPoint }) => {
 	const str = fsType;
 	const fs = ffmpeg.FS.filesystems[str];
-	if (!fs)
-		return false;
+	if(!fs)return false;
 	ffmpeg.FS.mount(fs, options, mountPoint);
 	return true;
 };
@@ -103,10 +100,9 @@ self.onmessage = async ({
 }) => {
 	const trans = [];
 	let data;
-	try {
-		if (type !== "LOAD" /* LOAD */ && !ffmpeg)
-			throw ERROR_NOT_LOADED;
-		switch (type) {
+	try{
+		if(type !== "LOAD" /* LOAD */ && !ffmpeg)throw ERROR_NOT_LOADED;
+		switch(type){
 			case "LOAD" /* LOAD */:
 				data = await load(_data);
 				break;
@@ -146,7 +142,7 @@ self.onmessage = async ({
 			default:
 				throw ERROR_UNKNOWN_MESSAGE_TYPE;
 		}
-	} catch (e) {
+	}catch(e){
 		self.postMessage({
 			id,
 			type: "ERROR" /* ERROR */,
@@ -154,7 +150,7 @@ self.onmessage = async ({
 		});
 		return;
 	}
-	if (data instanceof Uint8Array) {
+	if(data instanceof Uint8Array){
 		trans.push(data.buffer);
 	}
 	self.postMessage({ id, type, data }, trans);
