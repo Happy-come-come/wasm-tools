@@ -110,27 +110,31 @@
 			const coreWorkerUrl = await this.#getCoreWorker(config.workerURL || ffmpegCoreWorkerUrl, isUseCache, config.coreWorkerVersion || ffmpegWasmVersion);
 			const classWorkerURL = await this.#getWorker(ffmpegWorkerUrl, isUseCache, ffmpegWasmVersion);
 			if(!this.#worker){
-				this.#worker = classWorkerURL ? new Worker(new URL(classWorkerURL, import.meta.url), {
+				this.#worker = classWorkerURL ? new Worker(new URL(classWorkerURL), {
 					type: "module"
-				}) : new Worker(new URL("./worker.js", import.meta.url), {
+				}) : new Worker(new URL("./worker.js", document.location.href), {
 					type: "module"
 				});
 				this.#registerHandlers();
 			}
+			URL.revokeObjectURL(classWorkerURL);
 			config.wasmURL = wasmUrl;
 			config.coreURL = coreUrl;
 			config.workerURL = coreWorkerUrl;
-			const sendRes = this.#send({
+			const sendRes = await this.#send({
 				type: "LOAD" /* LOAD */,
 				data: config
 			}, undefined, signal);
+			URL.revokeObjectURL(wasmUrl);
+			URL.revokeObjectURL(coreUrl);
+			URL.revokeObjectURL(coreWorkerUrl);
 			return sendRes;
 		};
 		#getWorker = async (ffmpegWorkerUrl, useCache, version) => {
 			if(useCache){
-				const cachedWorker = (await getFromIndexedDB('ffmpegWasm', 'ffmpegWorker', 522))?.data;
-				if(cachedWorker && compareVersions(version, ffmpegWasmVersion?.data?.version) === 0){
-					const workerUrl = URL.createObjectURL(new Blob([cachedWorker], { type: 'application/javascript' }));
+				const cachedWorker = await getFromIndexedDB('FFmpegWasm', 'ffmpegWorker', 522);
+				if(cachedWorker?.data && compareVersions(version, cachedWorker?.version) === 0){
+					const workerUrl = URL.createObjectURL(new Blob([cachedWorker.data], { type: 'application/javascript' }));
 					return workerUrl;
 				}else{
 					const downloadedWorker = await request({
@@ -139,7 +143,7 @@
 						onlyResponse: true
 					});
 					const workerUrl = URL.createObjectURL(new Blob([downloadedWorker], { type: 'application/javascript' }));
-					await saveToIndexedDB('ffmpegWasm', 'ffmpegWorker', {data: downloadedWorker, version: version}, 522);
+					await saveToIndexedDB('FFmpegWasm', 'ffmpegWorker', {data: downloadedWorker, version: version}, 522);
 					return workerUrl;
 				}
 			}else{
@@ -154,9 +158,9 @@
 		};
 		#getCoreWorker = async (ffmpegCoreWorkerUrl, useCache, version) => {
 			if(useCache){
-				const cachedCoreWorker = (await getFromIndexedDB('ffmpegWasm', 'ffmpegCoreWorker', 522))?.data;
-				if(cachedCoreWorker && compareVersions(version, ffmpegWasmVersion?.data?.version) === 0){
-					const coreWorkerUrl = URL.createObjectURL(new Blob([cachedCoreWorker], { type: 'application/javascript' }));
+				const cachedCoreWorker = await getFromIndexedDB('FFmpegWasm', 'ffmpegCoreWorker', 522);
+				if(cachedCoreWorker?.data && compareVersions(version, cachedCoreWorker?.version) === 0){
+					const coreWorkerUrl = URL.createObjectURL(new Blob([cachedCoreWorker.data], { type: 'application/javascript' }));
 					return coreWorkerUrl;
 				}else{
 					const downloadedCoreWorker = await request({
@@ -165,7 +169,7 @@
 						onlyResponse: true
 					});
 					const coreWorkerUrl = URL.createObjectURL(new Blob([downloadedCoreWorker], { type: 'application/javascript' }));
-					await saveToIndexedDB('ffmpegWasm', 'ffmpegCoreWorker', {data: downloadedCoreWorker, version: version}, 522);
+					await saveToIndexedDB('FFmpegWasm', 'ffmpegCoreWorker', {data: downloadedCoreWorker, version: version}, 522);
 					return coreWorkerUrl;
 				}
 			}else{
@@ -180,9 +184,9 @@
 		};
 		#getWasm = async (ffmpegWasmUrl, useCache, version) => {
 			if(useCache){
-				const cachedWasm = (await getFromIndexedDB('ffmpegWasm', 'ffmpegWasm', 522))?.data;
-				if(cachedWasm && compareVersions(version, ffmpegWasmVersion?.data?.version) === 0){
-					const wasmUrl = URL.createObjectURL(new Blob([cachedWasm], { type: 'application/wasm' }));
+				const cachedWasm = await getFromIndexedDB('FFmpegWasm', 'ffmpegWasm', 522);
+				if(cachedWasm?.data && compareVersions(version, cachedWasm?.version) === 0){
+					const wasmUrl = URL.createObjectURL(new Blob([cachedWasm.data], { type: 'application/wasm' }));
 					return wasmUrl;
 				}else{
 					const downloadedWasm = await request({
@@ -191,7 +195,7 @@
 						onlyResponse: true
 					});
 					const wasmUrl = URL.createObjectURL(new Blob([downloadedWasm], { type: 'application/wasm' }));
-					await saveToIndexedDB('ffmpegWasm', 'ffmpegWasm', {data: downloadedWasm, version: version}, 522);
+					await saveToIndexedDB('FFmpegWasm', 'ffmpegWasm', {data: downloadedWasm, version: version}, 522);
 					return wasmUrl;
 				}
 			}else{
@@ -206,9 +210,9 @@
 		};
 		#getCore = async (ffmpegCoreUrl, useCache, version) => {
 			if(useCache){
-				const cachedCore = (await getFromIndexedDB('ffmpegWasm', 'ffmpegCore', 522))?.data;
-				if(cachedCore && compareVersions(version, ffmpegWasmVersion?.data?.version) === 0){
-					const coreUrl = URL.createObjectURL(new Blob([cachedCore], { type: 'application/javascript' }));
+				const cachedCore = await getFromIndexedDB('FFmpegWasm', 'ffmpegCore', 522);
+				if(cachedCore?.data && compareVersions(version, cachedCore?.version) === 0){
+					const coreUrl = URL.createObjectURL(new Blob([cachedCore.data], { type: 'application/javascript' }));
 					return coreUrl;
 				}else{
 					const downloadedCore = await request({
@@ -217,7 +221,7 @@
 						onlyResponse: true
 					});
 					const coreUrl = URL.createObjectURL(new Blob([downloadedCore], { type: 'application/javascript' }));
-					await saveToIndexedDB('ffmpegWasm', 'ffmpegCore', {data: downloadedCore, version: version}, 522);
+					await saveToIndexedDB('FFmpegWasm', 'ffmpegCore', {data: downloadedCore, version: version}, 522);
 					return coreUrl;
 				}
 			}else{
@@ -313,6 +317,9 @@
 
 	function compareVersions(version1, version2){
 		// 同じなら0, v1が大きいなら1, v2が大きいなら-1
+		if(version1 === version2)return 0;
+		if(!version1)return -1;
+		if(!version2)return 1;
 		const v1Parts = version1.split('.').map(Number);
 		const v2Parts = version2.split('.').map(Number);
 		const length = Math.max(v1Parts.length, v2Parts.length);

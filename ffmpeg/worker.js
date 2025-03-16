@@ -30,7 +30,7 @@ var load = async ({
 	const wasmURL = _wasmURL ? _wasmURL : _coreURL.replace(/.js$/g, ".wasm");
 	const workerURL = _workerURL ? _workerURL : _coreURL.replace(/.js$/g, ".worker.js");
 	ffmpeg = await self.createFFmpegCore({
-		mainScriptUrlOrBlob: `${coreURL}#${btoa(JSON.stringify({ wasmURL, workerURL }))}`
+		mainScriptUrlOrBlob: `${btoa(JSON.stringify({ wasmURL, workerURL }))}`
 	});
 	ffmpeg.setLogger((data) => self.postMessage({ type: "LOG" /* LOG */, data }));
 	ffmpeg.setProgress((data) => self.postMessage({
