@@ -1,7 +1,7 @@
 # wasm-tools
 自分用 wasm
 
-## FFmpeg 
+## FFmpeg こっちはダメそう
 ```
 configuration: --disable-x86asm --disable-inline-asm --disable-network --enable-gpl --enable-version3 --enable-libaom --enable-libass --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-libjxl --enable-libmp3lame --enable-libopus --enable-libvpx --enable-libwebp --enable-libxml2 --enable-lzma --enable-zlib
 ```
@@ -12,4 +12,4 @@ version 7.1 \(LTSになったらしいので\)
 ```
 Delegates (built-in): bzlib fontconfig freetype heic jng jpeg jxl lzma png raw tiff webp xml zip zlib zstd
 ```
-Version: ImageMagick 7.1.1-32 Q16-HDRI (convertコマンドなどを使っても警告が出ない最後のバージョン)
+Version: ImageMagick 7.1.1-45 Q16-HDRI (convertコマンドなどを使っても警告が出ない最後のバージョン)
