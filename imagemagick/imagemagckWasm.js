@@ -5753,4 +5753,4 @@ const ImageMagick = (function() {
 	}
 })();
 
-export default ImageMagick;
+//export default ImageMagick;
