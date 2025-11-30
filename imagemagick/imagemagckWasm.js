@@ -5752,6 +5752,3 @@ const ImageMagick = (function() {
 	}
 })();
 
-if (typeof window !== 'undefined') {
-    window.ImageMagick = ImageMagick;
-}
