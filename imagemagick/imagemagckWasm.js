@@ -29,7 +29,6 @@ await imageMagick.execute({commands: ['convert --version']});
 	and limitations under the License.
 	***************************************************************************** */
 const ImageMagick = (function() {
-	'use strict';
 
 	let isInitialized = false;
 	function __awaiter(thisArg, _arguments, P, generator){
@@ -5753,4 +5752,6 @@ const ImageMagick = (function() {
 	}
 })();
 
-//export default ImageMagick;
+if (typeof window !== 'undefined') {
+    window.ImageMagick = ImageMagick;
+}
