@@ -29,6 +29,10 @@ await imageMagick.execute({commands: ['convert --version']});
 	and limitations under the License.
 	***************************************************************************** */
 const ImageMagick = (function() {
+	'use strict';
+	let magickWorker;
+	const magickWorkerPromises = {};
+	let magickWorkerPromisesKey = 1;
 
 	let isInitialized = false;
 	function __awaiter(thisArg, _arguments, P, generator){
@@ -37,67 +41,6 @@ const ImageMagick = (function() {
 			function rejected(value){ try{ step(generator["throw"](value)); }catch(e){ reject(e); } }
 			function step(result){ result.done ? resolve(result.value) : new P(function (resolve){ resolve(result.value); }).then(fulfilled, rejected); }
 			step((generator = generator.apply(thisArg, _arguments || [])).next());
-		});
-	}
-
-	function openIndexedDB(dbName, storeName){
-		return new Promise((resolve, reject) => {
-			const request = indexedDB.open(dbName);
-
-			request.onerror = (event) => {
-				reject("Database error: " + event.target.errorCode);
-			};
-
-			request.onsuccess = (event) => {
-				let db = event.target.result;
-				if(db.objectStoreNames.contains(storeName)){
-					resolve(db);
-				}else{
-					db.close();
-					const newVersion = db.version + 1;
-					const versionRequest = indexedDB.open(dbName, newVersion);
-					versionRequest.onupgradeneeded = (event) => {
-						db = event.target.result;
-						db.createObjectStore(storeName, { keyPath: 'id' });
-					};
-					versionRequest.onsuccess = (event) => {
-						resolve(event.target.result);
-					};
-					versionRequest.onerror = (event) => {
-						reject("Database error: " + event.target.errorCode);
-					};
-				}
-			};
-
-			request.onupgradeneeded = (event) => {
-				const db = event.target.result;
-				db.createObjectStore(storeName, { keyPath: 'id' });
-			};
-		});
-	}
-
-	function getFromIndexedDB(dbName, storeName, id = 522){
-		return new Promise(async (resolve, reject) => {
-			try{
-				const db = await openIndexedDB(dbName, storeName);
-				const transaction = db.transaction(storeName, 'readonly');
-				const store = transaction.objectStore(storeName);
-				const getRequest = store.get(id);
-
-				getRequest.onsuccess = (event) => {
-					if(event.target.result){
-						resolve(structuredClone(event.target.result.data));
-					}else{
-						resolve(null);
-					}
-				};
-
-				getRequest.onerror = (event) => {
-					reject("Data fetch error: " + event.target.errorCode);
-				};
-			}catch(error){
-				reject(error);
-			}
 		});
 	}
 
