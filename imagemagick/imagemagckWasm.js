@@ -5630,7 +5630,7 @@ const ImageMagick = (function() {
 			return;
 		}
 
-		const modifiedJs = `const wasmUrl = "${wasmUrl}";\n` + magickJsText;
+		const modifiedJs = `var wasmUrl = "${wasmUrl}";\n` + magickJsText;
 		const modifiedJsBlob = new Blob([modifiedJs], { type: 'application/javascript' });
 		const modifiedJsBlobUrl = URL.createObjectURL(modifiedJsBlob);
 
@@ -5650,6 +5650,13 @@ const ImageMagick = (function() {
 		};
 
 		isInitialized = true;
+		return magickWorker;
+	}
+
+	function sleep(time){
+		return new Promise((resolve)=>{
+			setTimeout(()=>{return resolve(time)}, time);
+		});
 	}
 
 	return {
@@ -5693,5 +5700,5 @@ const ImageMagick = (function() {
 		knownSupportedReadWriteImageFormats: knownSupportedReadWriteImageFormats$$1,
 		IMAlign, IMAlpha, IMAutoThreshold, IMBoolean, IMCache, IMChannel, IMClass, IMClipPath, IMColorspace, IMCommand, IMCompliance, IMComplex, IMCompose, IMCompress, IMDataType, IMDebug, IMDecoration, IMDirection, IMDispose, IMDistort, IMDither, IMEndian, IMEvaluate, IMFillRule, IMFilter, IMFunction, IMGradient, IMGravity, IMIntensity, IMIntent, IMInterlace, IMInterpolate, IMKernel, IMLayers, IMLineCap, IMLineJoin, IMList, IMLogEvent, IMLog, IMMethod, IMMetric, IMMode, IMMorphology, IMModule, IMNoise, IMOrientation, IMPixelChannel, IMPixelIntensity, IMPixelMask, IMPixelTrait, IMPolicyDomain, IMPolicyRights, IMPreview, IMPrimitive, IMQuantumFormat, IMSparseColor, IMStatistic, IMStorage, IMStretch, IMStyle, IMTool, IMType, IMUnits, IMValidate, IMVirtualPixel, IMWeight,
 	}
-})();
+});
 

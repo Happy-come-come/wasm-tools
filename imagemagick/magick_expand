@@ -199,6 +199,7 @@ function abort(what){
 	throw e
 }
 var wasmBinaryFile;
+try{wasmBinaryFile = wasmUrl}catch{}
 
 function findWasmBinary(){
 	return locateFile("magick.wasm")

@@ -39,7 +39,7 @@ Compiler: clang (19.1.2)
 
 (function(global){
 	'use strict';
-	const _magickJsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick';
+	const _magickJsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick_expand';
 	const _magickApiJsUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick_api.js';
 	const _wasmUrl = 'https://raw.githubusercontent.com/Happy-come-come/wasm-tools/refs/heads/master/imagemagick/magick.wasm';
 	const _magickJsVersion = '1.0.0.0';
